@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AppData, KNode, PlanItem, View } from "./types";
+import type { AppData, KNode, PlanItem, Situation, Space, View } from "./types";
 import { fmtMin, sum } from "./ui";
 
 type Action = { verb: string; title: string; detail?: string; why?: string };
@@ -29,6 +29,10 @@ type Props = {
   view: View;
   activeSpace: string;
   selectedNode: KNode | null;
+  situationSpace?: Space | null;
+  onSaveSituation: (spaceId: string, situation: Situation, deadline?: string) => void;
+  onEditSituation?: (space: Space) => void;
+  onDoneSituation?: () => void;
   onAddPlans: (items: PlanItem[]) => void;
   onReschedule: () => void;
   onToast: (text: string) => void;
@@ -88,6 +92,10 @@ export default function Assistant({
   view,
   activeSpace,
   selectedNode,
+  situationSpace,
+  onSaveSituation,
+  onEditSituation,
+  onDoneSituation,
   onAddPlans,
   onReschedule,
   onToast,
@@ -104,6 +112,13 @@ export default function Assistant({
   const [steps, setSteps] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [imageError, setImageError] = useState("");
+  const [situationDraft, setSituationDraft] = useState({
+    deadline: "",
+    weak: "",
+    busy: "",
+    availableDays: "",
+    notes: "",
+  });
   const timers = useRef<number[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -112,6 +127,40 @@ export default function Assistant({
 
   const space = data.spaces.find((s) => s.id === activeSpace);
   const context = selectedNode ? `${VIEW_LABEL[view]} · ${selectedNode.title}` : `${VIEW_LABEL[view]} · ${space?.name ?? "全部"}`;
+
+  useEffect(() => {
+    if (!situationSpace) return;
+    setSituationDraft({
+      deadline: situationSpace.deadline ?? "",
+      weak: situationSpace.situation?.weak ?? "",
+      busy: situationSpace.situation?.busy ?? "",
+      availableDays: situationSpace.situation?.availableDays ?? "",
+      notes: situationSpace.situation?.notes ?? "",
+    });
+  }, [situationSpace]);
+
+  const saveSituationDraft = () => {
+    if (!situationSpace) return;
+    onSaveSituation(
+      situationSpace.id,
+      {
+        weak: situationDraft.weak.trim() || undefined,
+        busy: situationDraft.busy.trim() || undefined,
+        availableDays: situationDraft.availableDays.trim() || undefined,
+        notes: situationDraft.notes.trim() || undefined,
+      },
+      situationDraft.deadline,
+    );
+    setMessages((old) => [
+      ...old,
+      {
+        id: idRef.current++,
+        role: "ai",
+        text: `「${situationSpace.name}」的情况档案已记下。之后你直接说“更新情况”，或者从设置里点更新，我们再改。`,
+      },
+    ]);
+    onDoneSituation?.();
+  };
 
   const week = data.sessions.filter((s) => s.date >= "2026-11-04" && s.date <= "2026-11-10");
   const study = sum(week.filter((s) => s.cat === "study"));
@@ -262,7 +311,17 @@ export default function Assistant({
       "回答用简体中文，像真人讨论，别套固定标题模板，不要空话和过度排版。",
       "用户附图时，先说出图片里真正能看清的关键信息，再回答；看不清就说看不清，不要编。",
       `当前页面：${VIEW_LABEL[view]}；当前大类：${space?.name ?? "全部"}；当前节点：${selectedNode?.title ?? "未选择"}。`,
-      `情况档案：${JSON.stringify(data.profile)}。`,
+      `当前目标情况：${
+        space
+          ? JSON.stringify({
+              name: space.name,
+              description: space.description,
+              deadline: space.deadline,
+              situation: space.situation,
+            })
+          : "还没有选择目标"
+      }。`,
+      `所有目标：${data.spaces.map((item) => item.name).join("、") || "无"}。`,
       `本周时间事实：学习 ${fmtMin(study)}，计划 ${fmtMin(planMin)}，娱乐 ${fmtMin(leisure)}，数据结构 ${fmtMin(dsMin)}。`,
       `当前计划：\n${planLines || "无"}`,
       `最近番茄记录：\n${sessionLines || "无"}`,
@@ -273,6 +332,22 @@ export default function Assistant({
     const text = (raw ?? input).trim();
     const images = attachments.map((item) => item.url);
     if ((!text && !images.length) || thinking) return;
+
+    if (space && onEditSituation && /更新(一下)?(情况|档案)|改(一下)?情况/.test(text)) {
+      setInput("");
+      setMessages((old) => [
+        ...old,
+        { id: idRef.current++, role: "user", text },
+        {
+          id: idRef.current++,
+          role: "ai",
+          text: `好，把「${space.name}」现在的情况改一下。原来的内容已经带出来了，直接改要变的。`,
+        },
+      ]);
+      onEditSituation(space);
+      return;
+    }
+
     setInput("");
     setAttachments([]);
     setMessages((m) => [
@@ -450,14 +525,100 @@ export default function Assistant({
         </div>
 
         <div className="p-profile-strip">
-          它知道：{data.profile.goal} · 最虚 {data.profile.weak} · {data.profile.busy} · 可学习日{" "}
-          {data.profile.availableDays}。不知道的会先问。
+          {space?.situation ? (
+            <>
+              它知道「{space.name}」：截止 {space.deadline ?? "未设"} · 最虚 {space.situation.weak ?? "未填"} ·
+              最忙 {space.situation.busy ?? "未填"} · 可学习日 {space.situation.availableDays ?? "未填"}。
+            </>
+          ) : space ? (
+            <>「{space.name}」还没有情况档案；先告诉我这个目标的时间、难点和时间安排。</>
+          ) : (
+            <>还没有目标。先在设置里新建大类，我会先和你了解情况。</>
+          )}
+          {space && onEditSituation ? (
+            <button
+              className="p-button ghost sm p-profile-update"
+              type="button"
+              onClick={() => onEditSituation(space)}
+            >
+              更新情况
+            </button>
+          ) : null}
           <span className={`p-ai-connection${data.ai?.apiKey ? " is-on" : ""}`}>
             {data.ai?.apiKey
               ? `接口：${data.ai.provider === "custom" ? "自定义" : data.ai.provider} · ${data.ai.model}`
               : "未配置 AI 接口，当前使用脚本回答；可在设置里填写 Key。"}
           </span>
         </div>
+
+        {situationSpace ? (
+          <section className="p-situation-interview">
+            <div className="p-situation-head">
+              <div>
+                <span>先了解这个目标</span>
+                <b>{situationSpace.name}</b>
+              </div>
+              <button type="button" onClick={() => onDoneSituation?.()} aria-label="稍后再填">
+                稍后
+              </button>
+            </div>
+            <p>这个目标什么时候截止？最虚的是哪一块？哪几天最忙、哪些天能学？先说事实，之后再改。</p>
+            <div className="p-situation-grid">
+              <label className="p-field">
+                截止
+                <input
+                  className="p-input"
+                  type="date"
+                  value={situationDraft.deadline}
+                  onChange={(event) => setSituationDraft({ ...situationDraft, deadline: event.target.value })}
+                />
+              </label>
+              <label className="p-field">
+                最虚
+                <input
+                  className="p-input"
+                  value={situationDraft.weak}
+                  onChange={(event) => setSituationDraft({ ...situationDraft, weak: event.target.value })}
+                  placeholder="哪一科最没底"
+                />
+              </label>
+              <label className="p-field">
+                最忙
+                <input
+                  className="p-input"
+                  value={situationDraft.busy}
+                  onChange={(event) => setSituationDraft({ ...situationDraft, busy: event.target.value })}
+                  placeholder="例如 周三满课"
+                />
+              </label>
+              <label className="p-field">
+                可学习日
+                <input
+                  className="p-input"
+                  value={situationDraft.availableDays}
+                  onChange={(event) => setSituationDraft({ ...situationDraft, availableDays: event.target.value })}
+                  placeholder="例如 周二、周四、周末"
+                />
+              </label>
+              <label className="p-field p-situation-wide">
+                其他约束
+                <textarea
+                  className="p-textarea"
+                  rows={2}
+                  value={situationDraft.notes}
+                  onChange={(event) => setSituationDraft({ ...situationDraft, notes: event.target.value })}
+                  placeholder="例如 白天实习、晚上才有整块时间、每周只能推进两章"
+                />
+              </label>
+            </div>
+            <div className="p-situation-actions">
+              <button className="p-button primary sm" type="button" onClick={saveSituationDraft}>
+                保存情况档案
+              </button>
+              <span>之后可从“更新情况”或设置里再改。</span>
+            </div>
+          </section>
+        ) : null}
 
         <div className="p-chat" ref={chatRef}>
           {messages.map((m) => (

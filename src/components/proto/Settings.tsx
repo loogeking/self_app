@@ -17,6 +17,7 @@ const COLORS = ["#2f5fa8", "#b96b12", "#6b52b8", "#3f6f9b", "#a94a4a", "#6f7550"
 
 type PropsWithAi = Props & {
   onUpdateAi: (ai: AiConfig) => void;
+  onEditSituation: (space: Space) => void;
   onLoadDemo: () => void;
 };
 
@@ -32,6 +33,7 @@ export default function Settings({
   onEditSpace,
   onDeleteSpace,
   onUpdateAi,
+  onEditSituation,
   onLoadDemo,
   onReset,
   onToast,
@@ -405,33 +407,31 @@ export default function Settings({
           <section className="p-card">
             <div className="p-card-head">
               <h2>情况档案</h2>
-              <em>助手读这个</em>
+              <em>每个目标一份</em>
             </div>
-            <div className="p-profile">
-              <div className="p-profile-row">
-                <span>目标</span>
-                <b>{data.profile.goal || "未设置"}</b>
+            {data.spaces.length ? (
+              <div className="p-situation-list">
+                {data.spaces.map((space) => (
+                  <div className="p-situation-row" key={space.id}>
+                    <span className="p-dot" style={{ background: space.color }} />
+                    <div>
+                      <b>{space.name}</b>
+                      <small>
+                        {space.deadline ? `截止 ${space.deadline}` : "未设截止"}
+                        {space.situation?.weak ? ` · 最虚 ${space.situation.weak}` : " · 还没有情况档案"}
+                      </small>
+                    </div>
+                    <button className="p-button ghost sm" type="button" onClick={() => onEditSituation(space)}>
+                      更新
+                    </button>
+                  </div>
+                ))}
               </div>
-              <div className="p-profile-row">
-                <span>考试</span>
-                <b>{data.profile.examDate}</b>
-              </div>
-              <div className="p-profile-row">
-                <span>最虚</span>
-                <b>{data.profile.weak || "未设置"}</b>
-              </div>
-              <div className="p-profile-row">
-                <span>最忙</span>
-                <b>{data.profile.busy || "未设置"}</b>
-              </div>
-              <div className="p-profile-row">
-                <span>可学习日</span>
-                <b>{data.profile.availableDays || "未设置"}</b>
-              </div>
-            </div>
-            <p className="p-note" style={{ marginTop: 10 }}>
-              情况档案目前由本地种子和助手上下文使用；后续接后端后可在对话里确认更新。
-            </p>
+            ) : (
+              <p className="p-note">
+                还没有目标。新建大类后，助手会自动弹出，先了解这个目标的情况。
+              </p>
+            )}
           </section>
 
           <section className="p-card">

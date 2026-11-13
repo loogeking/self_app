@@ -11,7 +11,7 @@ type Props = {
   onMark: (node: KNode, source: string) => void;
   onWriteNote: (node: KNode) => void;
   onOpenLibrary: (node: KNode) => void;
-  onAddNode: (parent: KNode, title: string) => void;
+  onAddNode: (parent: KNode | null, title: string) => void;
   onUpdateNode: (node: KNode, title: string) => void;
   onDeleteNode: (node: KNode) => void;
   onSelectNode?: (node: KNode | null) => void;
@@ -170,6 +170,7 @@ export default function MapView({
   const [markOpen, setMarkOpen] = useState(false);
   const [markSource, setMarkSource] = useState("自学");
   const [customOpen, setCustomOpen] = useState(false);
+  const [customParent, setCustomParent] = useState<KNode | null>(null);
   const [customTitle, setCustomTitle] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const [editTitle, setEditTitle] = useState("");
@@ -776,7 +777,11 @@ export default function MapView({
                   </div>
                 );
               };
-              return roots.map((root) => renderTree(root));
+              return roots.length ? (
+                roots.map((root) => renderTree(root))
+              ) : (
+                <p className="kg-empty-copy">还没有节点。</p>
+              );
             })()}
           </div>
           <div className="kg-sidebar-foot">
@@ -944,6 +949,7 @@ export default function MapView({
                     className="kg-secondary-action"
                     onClick={() => {
                       setCustomTitle("");
+                      setCustomParent(selected);
                       setCustomOpen(true);
                     }}
                   >
@@ -986,7 +992,21 @@ export default function MapView({
               </div>
             </>
           ) : (
-            <div className="kg-empty-inspector">选择一个节点，查看它留下的事实。</div>
+            <div className="kg-empty-inspector">
+              {nodes.length ? "选择一个节点，查看它留下的事实。" : "这个大类还没有节点。先建一个根节点，再往下长。"}
+              <button
+                className="kg-secondary-action"
+                type="button"
+                style={{ marginTop: 12 }}
+                onClick={() => {
+                  setCustomParent(null);
+                  setCustomTitle("");
+                  setCustomOpen(true);
+                }}
+              >
+                <span>＋</span>新建第一个节点
+              </button>
+            </div>
           )}
         </aside>
       </div>
@@ -1040,9 +1060,9 @@ export default function MapView({
         </Modal>
       ) : null}
 
-      {customOpen && selected ? (
+      {customOpen ? (
         <Modal
-          title={`在「${selected.title}」下面加内容`}
+          title={customParent ? `在「${customParent.title}」下面加内容` : `给「${space.name}」建第一个节点`}
           subtitle="只添加你自己的标题；新节点先是空心，学过之后再标记。"
           onClose={() => setCustomOpen(false)}
           footer={
@@ -1055,7 +1075,7 @@ export default function MapView({
                 type="button"
                 disabled={!customTitle.trim()}
                 onClick={() => {
-                  onAddNode(selected, customTitle);
+                  onAddNode(customParent, customTitle);
                   setCustomOpen(false);
                 }}
               >

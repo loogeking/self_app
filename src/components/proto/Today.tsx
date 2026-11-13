@@ -129,23 +129,32 @@ export default function Today({
   );
 
   const activeSpaceInfo = data.spaces.find((s) => s.id === activeSpace) ?? null;
-  const targetDate =
-    activeSpace === "all" ? data.profile.examDate : activeSpaceInfo?.deadline ?? data.profile.examDate;
-  const targetName =
-    activeSpace === "all" || activeSpaceInfo?.id === "ky"
-      ? "初试"
-      : activeSpaceInfo?.name ?? "目标";
-  const daysToTarget = Math.round(
-    (Date.parse(targetDate + "T00:00:00Z") - Date.parse(TODAY + "T00:00:00Z")) / 86400000,
-  );
-  const profileBits = [
-    data.profile.goal,
-    data.profile.weak ? `最虚的是${data.profile.weak}` : "",
-    data.profile.busy,
-  ].filter(Boolean);
-  const profileLine = profileBits.length
-    ? `${profileBits.join(" · ")}。只定内容，不规定用多少分钟。`
-    : "还没有填写情况档案；可以到设置里补，或在助手对话里更新。只定内容，不规定用多少分钟。";
+  const targetDate = activeSpaceInfo?.deadline;
+  const targetName = activeSpaceInfo?.name ?? "目标";
+  const daysToTarget = targetDate
+    ? Math.round(
+        (Date.parse(targetDate + "T00:00:00Z") - Date.parse(TODAY + "T00:00:00Z")) / 86400000,
+      )
+    : null;
+  const situation = activeSpaceInfo?.situation;
+  const profileBits =
+    activeSpace === "all"
+      ? data.spaces.length
+        ? [`${data.spaces.length} 个目标放在一起`]
+        : []
+      : [
+          activeSpaceInfo?.description,
+          situation?.weak ? `最虚的是${situation.weak}` : "",
+          situation?.busy,
+          situation?.availableDays ? `可学习日 ${situation.availableDays}` : "",
+        ].filter(Boolean) as string[];
+  const profileLine = !data.spaces.length
+    ? "还没有目标。去设置新建一个，助手会先了解情况。只定内容，不规定用多少分钟。"
+    : activeSpace === "all"
+      ? "全部目标放在一起；选一个目标可以看具体的约束和截止。"
+      : profileBits.length
+        ? `${profileBits.join(" · ")}。只定内容，不规定用多少分钟。`
+        : "这个目标还没有情况档案；点助手里的“更新情况”补上。";
 
   const factLine = totalToday
     ? `今天记录 ${fmtMin(totalToday)}：学习 ${fmtMin(byCat.study)}，计划 ${fmtMin(byCat.plan)}，娱乐 ${fmtMin(byCat.leisure)}。${
@@ -268,13 +277,14 @@ export default function Today({
       <header className="p-page-head">
         <div>
           <p className="p-page-meta">
-            {TODAY} 周{weekdayCN(TODAY)} · 距{targetName} {daysToTarget} 天
+            {TODAY} 周{weekdayCN(TODAY)}
+            {daysToTarget !== null ? ` · 距${targetName} ${daysToTarget} 天` : ""}
           </p>
           <h1 className="p-h1">今天</h1>
           <p className="p-sub">
             {activeSpace === "all"
               ? profileLine
-              : `${activeSpaceInfo?.name ?? "当前大类"} · ${activeSpaceInfo?.description ?? "按内容推进"}。只定今天要碰的内容。`}
+              : `${activeSpaceInfo?.name ?? "当前目标"} · ${profileBits.join(" · ")}。只定今天要碰的内容。`}
           </p>
         </div>
         <div className="p-head-stats">

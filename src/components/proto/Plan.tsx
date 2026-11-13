@@ -76,6 +76,10 @@ export default function Plan({
   const deferred = plans.filter((p) => p.deferredFrom).length;
 
   const submit = () => {
+    if (!draft.spaceId) {
+      onToast("先在设置里新建一个目标，再排内容。");
+      return;
+    }
     if (!draft.title.trim()) return;
     const p: PlanItem = {
       id: `p-${Date.now()}`,
@@ -195,7 +199,13 @@ export default function Plan({
         </div>
         <span className="p-meta-line">实际学习 {fmtMin(study)} · 计划 {fmtMin(planMin)} · 娱乐 {fmtMin(leisure)}</span>
         <span style={{ flex: 1 }} />
-        <button className="p-button primary" type="button" onClick={() => setAddOpen(true)}>
+        <button
+          className="p-button primary"
+          type="button"
+          disabled={!data.spaces.length}
+          onClick={() => setAddOpen(true)}
+          title={!data.spaces.length ? "先在设置里新建一个目标" : "新建内容"}
+        >
           新建内容
         </button>
       </div>

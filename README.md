@@ -64,7 +64,8 @@ docker run --rm -p 3000:3000 -e APP_PASSWORD=你的密码 footprint
 
 ## 数据与边界
 
-- 首次打开是空工作区：没有计划、番茄记录、复盘、资料和已学状态，保留考研目录骨架。
+- 首次打开是彻底空工作区：没有大类、节点、计划、番茄记录、复盘或资料。
+- 新建大类后助手会自动弹出，先记录这个目标的情况档案；每个大类各有一份，后续可从“更新情况”或设置修改。
 - 设置里可以手动“载入示例数据”，也可以随时“清空我的数据”。
 - 示例与种子数据在 `src/components/proto/data.ts`。
 - 番茄Todo 导出的 `.xls` 实际是 SpreadsheetML XML，由 `src/components/proto/pomodoro.ts` 在浏览器中解析；复盘页和今日页共用。
@@ -96,9 +97,9 @@ src/components/proto/
   Plan.tsx            周内容板、进度、延期
   Library.tsx         书 / 笔记 / 复盘、本机文件导入
   Review.tsx          每日复盘、每周统计、番茄历史导入
-  Settings.tsx        大类、AI 接口、番茄映射、数据
-  Assistant.tsx       全局助手（真实 AI 或脚本模式）
-  data.ts             EMPTY / SEED 数据
+  Settings.tsx        大类、各目标情况档案、AI 接口、数据
+  Assistant.tsx       全局助手、目标情况问答、真实 AI 或脚本模式
+  data.ts             全空 EMPTY / 演示 SEED 数据
   map408.ts           408 教材节节点
   pomodoro.ts         SpreadsheetML 解析与导出汇总核对
   fileStore.ts        IndexedDB 文件存取

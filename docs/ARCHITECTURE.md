@@ -136,19 +136,23 @@ Docker 启动时同样需要 `-e APP_PASSWORD=...`。
 
 `src/components/proto/types.ts`：
 
-- `Space`：大类，带名称、颜色、说明、截止日期。
+- `Space`：大类 / 目标，带名称、颜色、说明、截止日期，以及自己的 `situation`（情况档案）。
 - `KNode`：知识节点，`state` 只有 `empty | marked | noted`；`custom` 表示用户自建；`parentId` 决定树。
 - `Doc`：资料，`kind` 为 PDF / Markdown / 图片 / 复盘；笔记有 `body`。
 - `PlanItem`：周内容。支持完成标准、依据、优先级、截止、状态，以及 `goalAmount / doneAmount / unit / progressNote` 和延期字段。
 - `Session`：番茄记录，含日期、开始时间、分钟、任务、分类、匹配节点、来源。
 - `ImportBatch`：一次导入的文件名、条数、重复数、日期范围。
 - `AiConfig`：服务商、Base URL、模型、API Key、温度。
-- `AppData`：以上数据的集合，加上 `profile`（情况档案）和 `prefs`（复盘节奏、任务映射）。
+- `Situation`：最虚、最忙、可学习日、其他约束和更新时间；挂在每个 `Space` 下，不设全局 profile。
+- `AppData`：以上数据的集合，加上 `prefs`（复盘节奏、任务映射）。
 
 `EMPTY` 和 `SEED` 都在 `data.ts`：
 
-- `EMPTY` 是首次打开的默认值：没有计划、番茄记录、复盘、资料和已学状态，保留目录骨架。
-- `SEED` 是设置页“载入示例数据”使用的演示数据。
+- `EMPTY` 是首次打开的默认值：没有大类、节点、计划、番茄记录、复盘或资料，`spaces` 也是空数组。
+- `SEED` 是设置页“载入示例数据”使用的演示数据，包含 408 + 数英政等示例。
+- 新建大类时，助手自动打开情况问答；保存后写入该 `Space.situation`。之后可在助手顶部“更新情况”或设置里的情况档案列表再次修改。
+
+![新建目标后的情况问询](screenshots/situation-onboarding.jpg)
 
 localStorage 键名是 `footprint-v1`。
 
@@ -184,6 +188,7 @@ localStorage 键名是 `footprint-v1`。
 - 每帧用 yaw / pitch / perspective 投影到屏幕；
 - 默认自动旋转，拖动改变旋转，滚轮或双指改变缩放；
 - 默认显示全部节点名称，可切“精简名称”降低密度；
+- 新大类没有节点时，可以从空地图直接建第一个根节点；
 - 搜索会旋转视角把命中节点转到正面；
 - 节点状态用形状与亮度区分：空心 / 半亮 / 发光；
 - 只记录“接触过”，不表达掌握度。
@@ -197,6 +202,8 @@ localStorage 键名是 `footprint-v1`。
 - 笔记点击：直接弹出预览，Markdown 显示正文，可继续跳知识库。
 
 笔记预览也在 `Library.tsx` 的文档卡片里可用。
+
+![新大类空地图](screenshots/new-space-map.jpg)
 
 ## 8. 计划、复盘与知识库
 
@@ -253,7 +260,9 @@ localStorage 键名是 `footprint-v1`。
 
 助手在 `Assistant.tsx` 中：
 
-- 有 API Key 时调用真实接口，带当前页面、节点、计划、最近番茄事实作为系统上下文；
+- 新建大类后自动进入“了解情况”，记录该目标截止、最虚、最忙、可学习日和约束；
+- 助手顶部有“更新情况”，也可以直接说“更新情况”重新打开该目标档案；
+- 有 API Key 时调用真实接口，带当前目标情况、页面、节点、计划、最近番茄事实作为系统上下文；
 - 支持最多 4 张图片（选择或粘贴），图片会压缩后以 `image_url` 多模态内容传入；
 - 模型本身必须支持视觉输入，否则由服务商返回错误；没有 Key 时会明确提示无法读图；
 - 没有 Key 时保留脚本回答；

@@ -1115,3 +1115,43 @@ body {
 .p-image-error { margin: 0 12px 6px; color: #9b3f3b; font-size: 10.5px; }
 .p-composer-row .p-button + .p-tiny { margin-left: 2px; }
 .p-composer-row .p-tiny { margin-right: auto; }
+/* 每个目标的情况档案 */
+.p-situation-list { display: flex; flex-direction: column; gap: 8px; }
+.p-situation-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(48, 66, 96, 0.07);
+}
+.p-situation-row:last-child { border-bottom: 0; }
+.p-situation-row > div { min-width: 0; flex: 1; }
+.p-situation-row b, .p-situation-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-situation-row b { color: var(--p-ink-2); font-size: 12px; }
+.p-situation-row small { margin-top: 2px; color: var(--p-faint); font-size: 10px; }
+.p-situation-row .p-button { flex: 0 0 auto; }
+.p-profile-update { margin-left: 8px; }
+.p-situation-interview {
+  margin: 10px 12px 0;
+  padding: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: 0 12px 30px -26px rgba(31, 45, 78, 0.5), inset 0 1px 0 white;
+}
+.p-situation-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.p-situation-head span { display: block; color: var(--p-faint); font-size: 10px; }
+.p-situation-head b { display: block; margin-top: 1px; color: var(--p-ink); font-size: 15px; }
+.p-situation-head button { border: 0; background: transparent; color: var(--p-faint); font-size: 11px; cursor: pointer; }
+.p-situation-interview > p { margin: 8px 0 10px; color: var(--p-muted); font-size: 11.5px; line-height: 1.7; }
+.p-situation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.p-situation-grid .p-field { font-size: 11px; }
+.p-situation-grid .p-input { height: 33px; font-size: 12px; }
+.p-situation-grid .p-textarea { font-size: 12px; }
+.p-situation-wide { grid-column: 1 / -1; }
+.p-situation-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 9px; }
+.p-situation-actions span { color: var(--p-faint); font-size: 10px; }
+@media (max-width: 500px) {
+  .p-situation-grid { grid-template-columns: minmax(0, 1fr); }
+  .p-situation-wide { grid-column: auto; }
+}

@@ -2,7 +2,6 @@ import type { AppData, Doc, KNode, PlanItem, Session } from "./types";
 import { MAP_408_NODES } from "./map408";
 
 export const TODAY = "2026-11-10";
-export const EXAM_DATE = "2027-12-25";
 
 export const SPACES = [
   {
@@ -11,6 +10,13 @@ export const SPACES = [
     color: "#2f5fa8",
     description: "408 / 数一 / 英一 / 政治",
     deadline: "2027-12-25",
+    situation: {
+      weak: "数据结构",
+      busy: "周三满课",
+      availableDays: "周二、周四、周末",
+      notes: "408 是主线，数学和英语每天都要碰一点。",
+      updatedAt: "2026-11-10T09:00:00+08:00",
+    },
   },
   {
     id: "lq",
@@ -18,12 +24,26 @@ export const SPACES = [
     color: "#b96b12",
     description: "算法 / 数据结构 / 真题",
     deadline: "2027-04-12",
+    situation: {
+      weak: "动态规划",
+      busy: "周末有课",
+      availableDays: "工作日晚间",
+      notes: "先补基础模板，再刷真题。",
+      updatedAt: "2026-11-09T20:00:00+08:00",
+    },
   },
   {
     id: "sp",
     name: "爬虫",
     color: "#6b52b8",
     description: "Python / HTTP / 解析 / 反爬",
+    situation: {
+      weak: "JS 逆向",
+      busy: "没有固定时间",
+      availableDays: "碎片时间",
+      notes: "项目驱动，遇到问题再补基础。",
+      updatedAt: "2026-11-08T21:00:00+08:00",
+    },
   },
 ];
 
@@ -480,13 +500,6 @@ export const SEED: AppData = {
       savedAt: "2026-10-27T22:40:00+08:00",
     },
   ],
-  profile: {
-    goal: "考研 2027",
-    examDate: EXAM_DATE,
-    weak: "数据结构",
-    busy: "周三满课",
-    availableDays: "周二、周四、周末",
-  },
   prefs: {
     weekStart: "monday",
     reviewDay: "sunday",
@@ -516,27 +529,14 @@ export const SEED: AppData = {
   },
 };
 
-// 首次打开是空工作区：保留 408 目录骨架，但不预置计划、记录、复盘、资料或已学状态。
+// 首次打开是彻底空工作区：没有大类、节点、计划、记录、复盘或资料。
 export const EMPTY: AppData = {
-  spaces: SPACES,
-  nodes: nodes.map((node) => ({
-    ...node,
-    state: "empty",
-    notes: 0,
-    lastAt: undefined,
-    source: undefined,
-  })),
+  spaces: [],
+  nodes: [],
   docs: [],
   plans: [],
   sessions: [],
   reviews: [],
-  profile: {
-    goal: "",
-    examDate: EXAM_DATE,
-    weak: "",
-    busy: "",
-    availableDays: "",
-  },
   prefs: SEED.prefs,
   imports: [],
   ai: { ...SEED.ai! },

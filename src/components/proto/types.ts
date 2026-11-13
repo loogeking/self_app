@@ -1,9 +1,18 @@
+export type Situation = {
+  weak?: string;
+  busy?: string;
+  availableDays?: string;
+  notes?: string;
+  updatedAt?: string;
+};
+
 export type Space = {
   id: string;
   name: string;
   color: string;
   description: string;
   deadline?: string;
+  situation?: Situation;
 };
 
 export type NodeState = "empty" | "marked" | "noted";
@@ -111,14 +120,6 @@ export type AiConfig = {
   temperature: number;
 };
 
-export type Profile = {
-  goal: string;
-  examDate: string;
-  weak: string;
-  busy: string;
-  availableDays: string;
-};
-
 export type Prefs = {
   weekStart: "monday" | "sunday";
   reviewDay: string;
@@ -134,7 +135,6 @@ export type AppData = {
   plans: PlanItem[];
   sessions: Session[];
   reviews: DailyReview[];
-  profile: Profile;
   prefs: Prefs;
   imports?: ImportBatch[];
   ai?: AiConfig;

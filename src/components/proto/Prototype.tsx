@@ -9,12 +9,12 @@ import type {
   KNode,
   PlanItem,
   Session,
+  Situation,
   Space,
   TaskRoute,
   View,
 } from "./types";
 import { EMPTY, SEED, TODAY } from "./data";
-import { MAP_408_NODES } from "./map408";
 import Today from "./Today";
 import MapView from "./MapView";
 import Plan from "./Plan";
@@ -25,7 +25,7 @@ import Assistant from "./Assistant";
 import { Modal, weekdayCN } from "./ui";
 
 const KEY = "footprint-v1";
-const AI_CLEAR_KEY = "footprint-ai-key-cleared-v1";
+const AI_CLEAR_KEY = "footprint-ai-key-cleared-v2";
 
 const NAV: { key: View; label: string }[] = [
   { key: "today", label: "今日" },
@@ -40,12 +40,9 @@ function clone(data: AppData): AppData {
   return JSON.parse(JSON.stringify(data)) as AppData;
 }
 
-function withOutline(data: AppData): AppData {
-  const ids = new Set(data.nodes.map((node) => node.id));
-  const missing = MAP_408_NODES.filter((node) => !ids.has(node.id));
+function withDefaults(data: AppData): AppData {
   return {
     ...data,
-    nodes: missing.length ? [...data.nodes, ...missing] : data.nodes,
     ai: data.ai ?? { ...SEED.ai! },
     imports: data.imports ?? [],
   };
@@ -56,6 +53,7 @@ export default function Prototype() {
   const [view, setView] = useState<View>("today");
   const [activeSpace, setActiveSpace] = useState<string>("all");
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [situationSpaceId, setSituationSpaceId] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<KNode | null>(null);
   const [libraryFocus, setLibraryFocus] = useState<string | null>(null);
   const [reviewInitial, setReviewInitial] = useState<string | undefined>(undefined);
@@ -85,7 +83,7 @@ export default function Prototype() {
       const raw = localStorage.getItem(KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as AppData;
-        if (parsed?.spaces?.length) setData(withOutline(parsed));
+        if (parsed && Array.isArray(parsed.spaces)) setData(withDefaults(parsed));
       }
     } catch {
       /* ignore */
@@ -193,13 +191,18 @@ export default function Prototype() {
     }));
   };
 
-  const addMapNode = (parent: KNode, title: string) => {
+  const addMapNode = (parent: KNode | null, title: string) => {
     const clean = title.trim();
     if (!clean) return;
+    const spaceId = parent?.spaceId ?? (activeSpace !== "all" ? activeSpace : data.spaces[0]?.id);
+    if (!spaceId) {
+      showToast("先新建一个大类，再添加节点。");
+      return;
+    }
     const node: KNode = {
-      id: `ky-408-custom-${Date.now()}`,
-      spaceId: parent.spaceId,
-      parentId: parent.id,
+      id: `${spaceId}-custom-${Date.now()}`,
+      spaceId,
+      parentId: parent?.id ?? null,
       title: clean,
       state: "empty",
       notes: 0,
@@ -375,9 +378,37 @@ export default function Prototype() {
     });
   };
 
-  const addSpace = (s: Space) => setData((d) => ({ ...d, spaces: [...d.spaces, s] }));
+  const addSpace = (s: Space) => {
+    setData((d) => ({ ...d, spaces: [...d.spaces, s] }));
+    setActiveSpace(s.id);
+    setSituationSpaceId(s.id);
+    setAssistantOpen(true);
+  };
   const editSpace = (s: Space) =>
     setData((d) => ({ ...d, spaces: d.spaces.map((x) => (x.id === s.id ? s : x)) }));
+
+  const saveSituation = (spaceId: string, situation: Situation, deadline?: string) => {
+    setData((d) => ({
+      ...d,
+      spaces: d.spaces.map((space) =>
+        space.id === spaceId
+          ? {
+              ...space,
+              deadline: deadline?.trim() || undefined,
+              situation: { ...situation, updatedAt: new Date().toISOString() },
+            }
+          : space,
+      ),
+    }));
+    setSituationSpaceId(null);
+    showToast("情况档案已保存。");
+  };
+
+  const editSituation = (space: Space) => {
+    setActiveSpace(space.id);
+    setSituationSpaceId(space.id);
+    setAssistantOpen(true);
+  };
 
   const deleteSpace = (id: string) => {
     setData((d) => ({
@@ -389,12 +420,15 @@ export default function Prototype() {
       sessions: d.sessions.filter((s) => s.spaceId !== id),
     }));
     if (activeSpace === id) setActiveSpace("all");
+    if (situationSpaceId === id) setSituationSpaceId(null);
   };
 
   const reset = () => {
     setData(clone(EMPTY));
     setActiveSpace("all");
     setView("today");
+    setSituationSpaceId(null);
+    setAssistantOpen(false);
     syncUrl("today", "all");
     try {
       localStorage.removeItem(KEY);
@@ -407,6 +441,8 @@ export default function Prototype() {
     setData(clone(SEED));
     setActiveSpace("all");
     setView("today");
+    setSituationSpaceId(null);
+    setAssistantOpen(false);
     syncUrl("today", "all");
     showToast("已载入示例数据；可在设置里再次清空。");
   };
@@ -420,7 +456,10 @@ export default function Prototype() {
   };
 
   const currentSpace = activeSpace === "all" ? null : data.spaces.find((s) => s.id === activeSpace) ?? null;
-  const headerDeadline = activeSpace === "all" ? data.profile.examDate : currentSpace?.deadline;
+  const situationSpace = situationSpaceId
+    ? data.spaces.find((space) => space.id === situationSpaceId) ?? null
+    : null;
+  const headerDeadline = activeSpace === "all" ? undefined : currentSpace?.deadline;
   const headerDays = headerDeadline
     ? Math.ceil(
         (Date.parse(headerDeadline + "T00:00:00Z") - Date.parse(TODAY + "T00:00:00Z")) / 86400000,
@@ -593,6 +632,7 @@ export default function Prototype() {
             onEditSpace={editSpace}
             onDeleteSpace={deleteSpace}
             onUpdateAi={updateAi}
+            onEditSituation={editSituation}
             onReset={reset}
             onLoadDemo={loadDemo}
             onToast={showToast}
@@ -620,6 +660,10 @@ export default function Prototype() {
         view={view}
         activeSpace={activeSpace}
         selectedNode={selectedNode}
+        situationSpace={situationSpace}
+        onSaveSituation={saveSituation}
+        onEditSituation={editSituation}
+        onDoneSituation={() => setSituationSpaceId(null)}
         onAddPlans={addPlans}
         onReschedule={reschedule}
         onToast={showToast}
