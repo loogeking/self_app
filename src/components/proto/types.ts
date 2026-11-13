@@ -44,7 +44,6 @@ export type DocKind = "pdf" | "md" | "image" | "review";
 export type Doc = {
   id: string;
   spaceId: string;
-  nodeId?: string;
   title: string;
   kind: DocKind;
   summary: string;
@@ -54,6 +53,9 @@ export type Doc = {
   mime?: string;
   fileKey?: string;
   fileName?: string;
+  nodeIds?: string[];
+  /** @deprecated 旧版单节点字段；加载时会合并到 nodeIds。 */
+  nodeId?: string;
   updatedAt: string;
   tags?: string[];
 };

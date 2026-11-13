@@ -71,6 +71,7 @@ docker run --rm -p 3000:3000 -e APP_PASSWORD=你的密码 footprint
 - 番茄Todo 导出的 `.xls` 实际是 SpreadsheetML XML，由 `src/components/proto/pomodoro.ts` 在浏览器中解析；复盘页和今日页共用。
 - 导入按「日期 + 开始时间 + 待办名称」去重；0 分钟记录保留但不计入统计。复盘导入会先核对文件声明的条数和时长。
 - 知识库支持导入 PDF、图片、Markdown；原始文件保存在浏览器 IndexedDB，不进入 localStorage。
+- 节点不再直接写笔记，改为从知识库多选关联资料；一个节点可关联多份资料，一份资料也可关联多个节点，解绑不会删除资料。
 - PDF 预览和助手都能“AI 整理成地图”：读 PDF 目录/前部文字，先生成新增节点提议，确认后才写入地图。
 - 学习数据只存在当前浏览器的 `localStorage`，键名 `footprint-v2`。从旧版升级时会一次性清掉 `footprint-v1` 的演示数据。
 - 助手在未配置 API 时使用脚本回答；配置 Key 后通过需要登录的 `/api/ai/chat` 请求 OpenAI 兼容接口。
@@ -97,7 +98,7 @@ src/components/proto/
   Today.tsx           今日内容、事实、番茄导入
   MapView.tsx         可旋转 3D 知识图谱、全量标签、节点增删改查
   Plan.tsx            周内容板、进度、延期
-  Library.tsx         书 / 笔记 / 复盘、本机文件导入
+  Library.tsx         资料 / 笔记 / 复盘、本机文件导入、多节点绑定
   Review.tsx          每日复盘、每周统计、番茄历史导入
   Settings.tsx        大类、各目标情况档案、AI 接口、数据
   Assistant.tsx       全局助手、目标情况问答、真实 AI 或脚本模式

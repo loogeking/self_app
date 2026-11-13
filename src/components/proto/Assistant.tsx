@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AiPulse, AppData, Doc, KNode, NewMapNode, PlanItem, Situation, Space, View } from "./types";
 import { fmtMin, Modal, sum } from "./ui";
 import PdfMap from "./PdfMap";
+import { docNodeIds } from "./docLinks";
 
 type Action = { verb: string; title: string; detail?: string; why?: string };
 type Proposal = {
@@ -390,7 +391,7 @@ export default function Assistant({
     const docLines = data.docs
       .filter((doc) => !space || doc.spaceId === space.id)
       .slice(0, 60)
-      .map((doc) => `- ${doc.title} | ${doc.kind} | node=${doc.nodeId ?? "未挂"} | ${doc.summary.slice(0, 50)}`)
+      .map((doc) => `- ${doc.title} | ${doc.kind} | nodes=${docNodeIds(doc).join(",") || "未挂"} | ${doc.summary.slice(0, 50)}`)
       .join("\n");
     return [
       "你是个人学习系统「足迹」的规划与复盘助手。",
@@ -905,7 +906,7 @@ export default function Assistant({
                   }}
                 >
                   <b>{doc.title}</b>
-                  <span>{doc.size ?? "PDF"} · {doc.nodeId ? "已挂节点" : "未挂节点"}</span>
+                  <span>{doc.size ?? "PDF"} · {docNodeIds(doc).length ? `已关联 ${docNodeIds(doc).length} 个节点` : "未挂节点"}</span>
                 </button>
               ))}
           </div>

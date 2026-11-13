@@ -17,6 +17,7 @@ import type {
   View,
 } from "./types";
 import { EMPTY, SEED, TODAY } from "./data";
+import { docNodeIds, normalizeDocLinks, syncNodeDocCounts } from "./docLinks";
 import Today from "./Today";
 import MapView from "./MapView";
 import Plan from "./Plan";
@@ -44,11 +45,11 @@ function clone(data: AppData): AppData {
 }
 
 function withDefaults(data: AppData): AppData {
-  return {
+  return normalizeDocLinks({
     ...data,
     ai: data.ai ?? { ...SEED.ai! },
     imports: data.imports ?? [],
-  };
+  });
 }
 
 export default function Prototype() {
@@ -62,9 +63,9 @@ export default function Prototype() {
   const [libraryFocus, setLibraryFocus] = useState<string | null>(null);
   const [reviewInitial, setReviewInitial] = useState<string | undefined>(undefined);
   const [reviewKey, setReviewKey] = useState(0);
-  const [noteNode, setNoteNode] = useState<KNode | null>(null);
-  const [noteTitle, setNoteTitle] = useState("");
-  const [noteBody, setNoteBody] = useState("");
+  const [linkNode, setLinkNode] = useState<KNode | null>(null);
+  const [linkIds, setLinkIds] = useState<string[]>([]);
+  const [linkQuery, setLinkQuery] = useState("");
   const [toast, setToast] = useState("");
   const toastTimer = useRef<number | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -168,7 +169,11 @@ export default function Prototype() {
   const mapNodes = mapSpace ? data.nodes.filter((n) => n.spaceId === mapSpace.id) : [];
   const mapNodeIds = new Set(mapNodes.map((n) => n.id));
   const mapDocs = mapSpace
-    ? data.docs.filter((d) => d.spaceId === mapSpace.id && (!d.nodeId || mapNodeIds.has(d.nodeId)))
+    ? data.docs.filter((d) => {
+        if (d.spaceId !== mapSpace.id) return false;
+        const linked = docNodeIds(d);
+        return !linked.length || linked.some((id) => mapNodeIds.has(id));
+      })
     : [];
 
   const updatePlanStatus = (id: string, status: PlanItem["status"]) => {
@@ -229,20 +234,23 @@ export default function Prototype() {
     rootId: string | null,
   ) => {
     if (!incoming.length) return;
-    const nodes: KNode[] = incoming.map((node) => ({
+    const added: KNode[] = incoming.map((node) => ({
       ...node,
       state: "empty",
       notes: 0,
       custom: true,
     }));
-    setData((d) => ({
-      ...d,
-      nodes: [...d.nodes, ...nodes],
-      docs: d.docs.map((doc) =>
-        doc.id === docId ? { ...doc, spaceId, nodeId: doc.nodeId ?? rootId ?? undefined } : doc,
-      ),
-    }));
-    showToast(`AI 提议已写入：新增 ${nodes.length} 个节点，先都是空心。`);
+    setData((d) => {
+      const docs = d.docs.map((doc) => {
+        if (doc.id !== docId) return doc;
+        const ids = new Set(docNodeIds(doc));
+        if (rootId) ids.add(rootId);
+        return { ...doc, spaceId, nodeIds: [...ids] };
+      });
+      const nodes = syncNodeDocCounts([...d.nodes, ...added], docs);
+      return { ...d, nodes, docs };
+    });
+    showToast(`AI 提议已写入：新增 ${added.length} 个节点，先都是空心。`);
   };
 
   const updateMapNode = (node: KNode, title: string) => {
@@ -269,15 +277,14 @@ export default function Prototype() {
           }
         }
       }
-      return {
-        ...d,
-        nodes: d.nodes.filter((n) => !remove.has(n.id)),
-        docs: d.docs.map((doc) =>
-          doc.nodeId && remove.has(doc.nodeId) ? { ...doc, nodeId: node.parentId ?? undefined } : doc,
-        ),
-      };
+      const docs = d.docs.map((doc) => ({
+        ...doc,
+        nodeIds: docNodeIds(doc).filter((id) => !remove.has(id)),
+      }));
+      const nodes = syncNodeDocCounts(d.nodes.filter((n) => !remove.has(n.id)), docs);
+      return { ...d, nodes, docs };
     });
-    showToast(`已删除「${node.title}」；相关笔记已移到上一级。`);
+    showToast(`已删除「${node.title}」；关联资料本身保留，仅解除这些节点的绑定。`);
   };
 
   const updateAi = (ai: AiConfig) => setData((d) => ({ ...d, ai }));
@@ -321,48 +328,27 @@ export default function Prototype() {
     setSelectedNode((n) => (n && n.id === node.id ? { ...n, state: "marked", source, lastAt: TODAY } : n));
   };
 
-  const openNote = (node: KNode) => {
-    setNoteNode(node);
-    setNoteTitle("");
-    setNoteBody("");
+  const openLinks = (node: KNode) => {
+    setLinkNode(node);
+    setLinkIds(data.docs.filter((doc) => docNodeIds(doc).includes(node.id)).map((doc) => doc.id));
+    setLinkQuery("");
   };
 
-  const saveNote = () => {
-    if (!noteNode) return;
-    const title = noteTitle.trim() || `${noteNode.title} 笔记`;
-    const body = noteBody.trim() || `# ${title}\n\n`;
-    const doc: Doc = {
-      id: `d-note-${Date.now()}`,
-      spaceId: noteNode.spaceId,
-      nodeId: noteNode.id,
-      title,
-      kind: "md",
-      summary: body.replace(/[#>*_`~-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 90) || "新笔记",
-      body,
-      updatedAt: TODAY,
-    };
-    setData((d) => ({
-      ...d,
-      docs: [doc, ...d.docs],
-      nodes: (d.nodes.some((n) => n.id === noteNode.id) ? d.nodes : [...d.nodes, noteNode]).map((n) =>
-        n.id === noteNode.id
-          ? {
-              ...n,
-              state: "noted",
-              notes: n.notes + 1,
-              lastAt: TODAY,
-              source: n.source ?? "笔记",
-            }
-          : n,
-      ),
-    }));
-    setSelectedNode((n) =>
-      n && n.id === noteNode.id
-        ? { ...n, state: "noted", notes: n.notes + 1, lastAt: TODAY, source: n.source ?? "笔记" }
-        : n,
-    );
-    setNoteNode(null);
-    showToast("笔记已保存，节点已点亮");
+  const saveLinks = () => {
+    if (!linkNode) return;
+    const selected = new Set(linkIds);
+    const docs = data.docs.map((doc) => {
+      const ids = new Set(docNodeIds(doc));
+      if (selected.has(doc.id)) ids.add(linkNode.id);
+      else ids.delete(linkNode.id);
+      return { ...doc, nodeIds: [...ids] };
+    });
+    const nodes = syncNodeDocCounts(data.nodes, docs);
+    const next = nodes.find((node) => node.id === linkNode.id) ?? null;
+    setData((d) => ({ ...d, docs, nodes }));
+    setSelectedNode((current) => (current && current.id === linkNode.id ? next : current));
+    setLinkNode(null);
+    showToast(`「${linkNode.title}」的关联资料已更新。`);
   };
 
   const saveReview = (date: string, text: string, tags: string[]) => {
@@ -595,7 +581,7 @@ export default function Prototype() {
             onOpenDoc={(doc) => {
               setView("library");
               setActiveSpace(doc.spaceId);
-              setLibraryFocus(doc.nodeId ?? null);
+              setLibraryFocus(docNodeIds(doc)[0] ?? null);
               syncUrl("library", doc.spaceId);
             }}
           />
@@ -609,7 +595,7 @@ export default function Prototype() {
               nodes={mapNodes}
               docs={mapDocs}
               onMark={markNode}
-              onWriteNote={openNote}
+              onLinkDocs={openLinks}
               onOpenLibrary={(node) => {
                 setActiveSpace(node.spaceId);
                 setLibraryFocus(node.id);
@@ -709,36 +695,68 @@ export default function Prototype() {
         onToast={showToast}
       />
 
-      {noteNode ? (
+      {linkNode ? (
         <Modal
-          title={`写笔记 · ${noteNode.title}`}
-          subtitle="学完之后留下证据；保存后节点会从空心变成有笔记。"
-          onClose={() => setNoteNode(null)}
+          title={`关联资料 · ${linkNode.title}`}
+          subtitle="一个节点可以关联多份 PDF、Markdown 或图片；同一份资料也可以关联多个节点。"
+          onClose={() => setLinkNode(null)}
           footer={
             <>
-              <button className="p-button" type="button" onClick={() => setNoteNode(null)}>
+              <button className="p-button" type="button" onClick={() => setLinkNode(null)}>
                 取消
               </button>
-              <button className="p-button primary" type="button" onClick={saveNote}>
-                保存并点亮
+              <button className="p-button primary" type="button" onClick={saveLinks}>
+                保存关联（{linkIds.length}）
               </button>
             </>
           }
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="p-link-modal">
             <input
               className="p-input"
-              value={noteTitle}
-              onChange={(e) => setNoteTitle(e.target.value)}
-              placeholder="标题"
+              value={linkQuery}
+              onChange={(event) => setLinkQuery(event.target.value)}
+              placeholder="搜索资料标题或摘要…"
             />
-            <textarea
-              className="p-textarea"
-              style={{ minHeight: 180 }}
-              value={noteBody}
-              onChange={(e) => setNoteBody(e.target.value)}
-              placeholder={"# 标题\n\n写下你学到的东西；保存后节点会从空心变成有笔记。"}
-            />
+            <p className="p-tiny p-faint">
+              已关联 {linkIds.length} 份。取消勾选只会解除这个节点的绑定，不会删除资料。
+            </p>
+            <div className="p-link-list">
+              {data.docs
+                .filter((doc) => {
+                  const q = linkQuery.trim().toLowerCase();
+                  return !q || `${doc.title} ${doc.summary}`.toLowerCase().includes(q);
+                })
+                .map((doc) => {
+                  const checked = linkIds.includes(doc.id);
+                  const otherLinks = docNodeIds(doc).filter((id) => id !== linkNode.id).length;
+                  const space = data.spaces.find((item) => item.id === doc.spaceId);
+                  return (
+                    <label className={`p-link-row${checked ? " is-on" : ""}`} key={doc.id}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setLinkIds((old) =>
+                            checked ? old.filter((id) => id !== doc.id) : [...old, doc.id],
+                          )
+                        }
+                      />
+                      <span className="p-link-kind">{doc.kind === "pdf" ? "PDF" : doc.kind === "md" ? "MD" : doc.kind === "image" ? "IMG" : "复"}</span>
+                      <span className="p-link-copy">
+                        <b>{doc.title}</b>
+                        <small>
+                          {space?.name ?? "未分类"} · {doc.size ?? doc.updatedAt}
+                          {otherLinks ? ` · 已关联 ${otherLinks} 个其他节点` : ""}
+                        </small>
+                      </span>
+                    </label>
+                  );
+                })}
+              {!data.docs.length ? (
+                <p className="p-empty">资料库还是空的。先去知识库导入 PDF、Markdown 或图片。</p>
+              ) : null}
+            </div>
           </div>
         </Modal>
       ) : null}

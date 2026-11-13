@@ -1231,3 +1231,73 @@ body {
 .p-pdf-picker button:hover { border-color: rgba(47, 95, 168, 0.35); background: rgba(255, 255, 255, 0.75); }
 .p-pdf-picker b { color: var(--p-ink-2); font-size: 12.5px; }
 .p-pdf-picker span { color: var(--p-faint); font-size: 10px; }
+/* Modal must sit above the assistant drawer; otherwise its backdrop blurs the dialog. */
+.p-overlay { z-index: 110; }
+.p-toast { z-index: 120; }
+
+/* Node ↔ documents many-to-many */
+.p-link-modal { display: flex; flex-direction: column; gap: 9px; }
+.p-link-list { display: flex; flex-direction: column; gap: 5px; max-height: 46vh; overflow: auto; padding: 2px; }
+.p-link-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px solid rgba(48, 66, 96, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  transition: border-color .15s, background-color .15s;
+}
+.p-link-row:hover { border-color: rgba(47, 95, 168, 0.3); }
+.p-link-row.is-on { border-color: rgba(47, 95, 168, 0.45); background: rgba(47, 95, 168, 0.065); }
+.p-link-row input { accent-color: #2f5fa8; width: 14px; height: 14px; flex: 0 0 auto; }
+.p-link-kind {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: rgba(47, 95, 168, 0.09);
+  color: #2f5fa8;
+  font-family: var(--p-mono);
+  font-size: 8px;
+}
+.p-link-copy { min-width: 0; }
+.p-link-copy b, .p-link-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-link-copy b { color: var(--p-ink-2); font-size: 12px; font-weight: 600; }
+.p-link-copy small { margin-top: 2px; color: var(--p-faint); font-size: 10px; }
+.p-linked-nodes { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.p-root:not(.is-map-view) .p-linked-nodes .p-tag { font-family: var(--p-sans); font-size: 9.5px; }
+/* Modals opened from the dark map still use the light dialog palette. */
+.p-root.is-map-view .p-overlay { background: rgba(4, 8, 12, 0.64); }
+.p-root.is-map-view .p-modal {
+  color: var(--p-ink);
+  background: rgba(250, 252, 255, 0.96);
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 34px 90px -30px rgba(0, 0, 0, 0.65);
+}
+.p-root.is-map-view .p-modal-head h2 { color: var(--p-ink); }
+.p-root.is-map-view .p-modal-sub,
+.p-root.is-map-view .p-modal .p-faint,
+.p-root.is-map-view .p-modal .p-tiny,
+.p-root.is-map-view .p-modal .p-note { color: var(--p-muted); }
+.p-root.is-map-view .p-modal .p-input,
+.p-root.is-map-view .p-modal .p-textarea,
+.p-root.is-map-view .p-modal .p-select {
+  color: var(--p-ink);
+  background: #fff;
+  border-color: rgba(48, 66, 96, 0.2);
+}
+.p-root.is-map-view .p-modal .p-button {
+  color: var(--p-ink);
+  background: #fff;
+  border-color: rgba(48, 66, 96, 0.2);
+}
+.p-root.is-map-view .p-modal .p-button.primary {
+  color: #fff;
+  background: #2f5fa8;
+  border-color: #2f5fa8;
+}
+.p-root.is-map-view .p-modal .p-button.ghost { background: transparent; }

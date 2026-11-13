@@ -6,6 +6,7 @@ import { CAT_COLOR, CAT_LABEL, Markdownish, Modal, fmtMin, sum } from "./ui";
 import { getLocalFile, putLocalFile } from "./fileStore";
 import { TODAY } from "./data";
 import PdfMap from "./PdfMap";
+import { docNodeIds } from "./docLinks";
 
 type Props = {
   data: AppData;
@@ -129,7 +130,7 @@ export default function Library({
         next.push({
           id,
           spaceId,
-          nodeId: targetNode?.id,
+          nodeIds: targetNode?.id ? [targetNode.id] : [],
           title: file.name.replace(/\.[^.]+$/, ""),
           fileName: file.name,
           kind,
@@ -175,7 +176,7 @@ export default function Library({
 
   const docs = useMemo(() => {
     let list = data.docs.filter((d) => activeSpace === "all" || d.spaceId === activeSpace);
-    if (focusNodeId) list = list.filter((d) => d.nodeId === focusNodeId);
+    if (focusNodeId) list = list.filter((d) => docNodeIds(d).includes(focusNodeId));
     if (kind !== "all") list = list.filter((d) => d.kind === kind);
     const q = query.trim();
     if (q) list = list.filter((d) => (d.title + " " + d.summary + " " + (d.body ?? "")).includes(q));
@@ -205,7 +206,7 @@ export default function Library({
           push("reviews", "复盘笔记", "每日 / 每周", d);
           continue;
         }
-        const sub = topSubject(data.nodes, d.nodeId);
+        const sub = topSubject(data.nodes, docNodeIds(d)[0]);
         if (sub) push(`node-${sub.id}`, sub.title, "科目", d);
         else push("inbox", "未挂节点", "收纳箱", d);
       }
@@ -225,6 +226,11 @@ export default function Library({
   }, [data.docs, activeSpace]);
 
   const previewSpace = preview ? data.spaces.find((s) => s.id === preview.spaceId) : null;
+  const previewNodeList = preview
+    ? docNodeIds(preview)
+        .map((id) => data.nodes.find((node) => node.id === id))
+        .filter((node): node is KNode => Boolean(node))
+    : [];
   const mapSpace = mapDoc ? data.spaces.find((space) => space.id === mapDoc.spaceId) : null;
   const previewSessions = preview?.kind === "review" && preview.updatedAt
     ? data.sessions.filter((s) => s.date === preview.updatedAt)
@@ -335,7 +341,10 @@ export default function Library({
               <div className="p-doc-grid">
                 {g.docs.map((d) => {
                   const sp = data.spaces.find((s) => s.id === d.spaceId);
-                  const n = data.nodes.find((x) => x.id === d.nodeId);
+                  const linked = docNodeIds(d)
+                    .map((id) => data.nodes.find((node) => node.id === id))
+                    .filter((node): node is KNode => Boolean(node));
+                  const n = linked[0];
                   const coverTitle =
                     d.kind === "review"
                       ? d.updatedAt
@@ -356,8 +365,11 @@ export default function Library({
                         <div className="p-doc-meta">
                           {d.kind === "review" ? (
                             <span className="p-node">复盘 · {(d.tags ?? ["每日"]).join(" / ")}</span>
-                          ) : d.nodeId ? (
-                            <span className="p-node">{n?.title ?? "节点"}</span>
+                          ) : n ? (
+                            <span className="p-node" title={linked.map((node) => node.title).join(" / ")}>
+                              {n.title}
+                              {linked.length > 1 ? ` +${linked.length - 1}` : ""}
+                            </span>
                           ) : (
                             <span>未挂节点</span>
                           )}
@@ -431,8 +443,18 @@ export default function Library({
                   {previewSpace?.name}
                 </div>
                 <div>
-                  <span className="p-faint">节点：</span>
-                  {nodeLabel(data.nodes, preview.nodeId)}
+                  <span className="p-faint">关联节点：</span>
+                  {previewNodeList.length ? (
+                    <span className="p-linked-nodes">
+                      {previewNodeList.map((node) => (
+                        <span className="p-tag" key={node.id}>
+                          {node.title}
+                        </span>
+                      ))}
+                    </span>
+                  ) : (
+                    "未挂节点"
+                  )}
                 </div>
                 {preview.pages ? (
                   <div>
@@ -468,11 +490,11 @@ export default function Library({
               ) : preview.kind === "pdf" ? (
                 <div className="p-preview-page">
                   <div style={{ fontSize: 9, letterSpacing: "0.18em", color: "#8a8f84", marginBottom: 18 }}>
-                    {previewSpace?.name} · {nodeLabel(data.nodes, preview.nodeId)}
+                    {previewSpace?.name} · {previewNodeList[0]?.title ?? "未挂节点"}
                   </div>
                   <h3>{preview.title}</h3>
                   <p style={{ marginBottom: 12 }}>
-                    第 1 章　{nodeLabel(data.nodes, preview.nodeId)}
+                    第 1 章　{previewNodeList[0]?.title ?? "未挂节点"}
                   </p>
                   <p>
                     本节从基本概念开始，先把逻辑结构与存储结构分开，再讨论时间复杂度和空间复杂度的分析方法。

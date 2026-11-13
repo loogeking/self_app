@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { Doc, KNode, Space } from "./types";
 import { Markdownish, Modal } from "./ui";
+import { docNodeIds } from "./docLinks";
 
 type Props = {
   space: Space;
   nodes: KNode[];
   docs: Doc[];
   onMark: (node: KNode, source: string) => void;
-  onWriteNote: (node: KNode) => void;
+  onLinkDocs: (node: KNode) => void;
   onOpenLibrary: (node: KNode) => void;
   onAddNode: (parent: KNode | null, title: string) => void;
   onUpdateNode: (node: KNode, title: string) => void;
@@ -124,7 +125,7 @@ function descendants(nodes: KNode[], id: string): Set<string> {
 }
 
 function statusLabel(node: KNode): string {
-  if (node.state === "noted") return `有笔记 · ${node.notes} 篇`;
+  if (node.state === "noted") return `有资料 · ${node.notes} 份`;
   if (node.state === "marked") return `标记已学${node.source ? ` · ${node.source}` : ""}`;
   return "未学";
 }
@@ -146,7 +147,7 @@ export default function MapView({
   nodes,
   docs,
   onMark,
-  onWriteNote,
+  onLinkDocs,
   onOpenLibrary,
   onAddNode,
   onUpdateNode,
@@ -217,7 +218,7 @@ export default function MapView({
   const selectedDocs = useMemo(() => {
     if (!selected) return [];
     const ids = descendants(nodes, selected.id);
-    return docs.filter((doc) => doc.nodeId && ids.has(doc.nodeId));
+    return docs.filter((doc) => docNodeIds(doc).some((id) => ids.has(id)));
   }, [docs, nodes, selected]);
   const roots = useMemo(() => nodes.filter((node) => node.parentId === null), [nodes]);
   const stats = useMemo(
@@ -645,7 +646,7 @@ export default function MapView({
           <span className="kg-app-dot" />
           <div>
             <strong>{space.name}</strong>
-            <span>3D 学习足迹 · 只记录接触与笔记</span>
+            <span>3D 学习足迹 · 只记录接触与资料</span>
           </div>
         </div>
         <div className="kg-toolbar-tools">
@@ -693,7 +694,7 @@ export default function MapView({
                 className={filter === value ? "is-on" : ""}
                 onClick={() => setFilter(value)}
               >
-                {value === "all" ? "全部" : value === "noted" ? "有笔记" : value === "marked" ? "标记" : "未学"}
+                {value === "all" ? "全部" : value === "noted" ? "有资料" : value === "marked" ? "标记" : "未学"}
               </button>
             ))}
           </div>
@@ -786,7 +787,7 @@ export default function MapView({
           </div>
           <div className="kg-sidebar-foot">
             <span className="kg-signal" />
-            数据来自学习记录与笔记，不代表掌握度
+            数据来自学习记录与关联资料，不代表掌握度
           </div>
         </aside>
 
@@ -873,9 +874,9 @@ export default function MapView({
             </span>
             <span>
               <i className="kg-status-dot noted" />
-              有笔记 {stats.noted}
+              有资料 {stats.noted}
             </span>
-            <span className="kg-status-note">点亮只表示接触过；证据在笔记和复盘里</span>
+            <span className="kg-status-note">点亮只表示接触过；证据在关联资料和复盘里</span>
           </div>
         </div>
 
@@ -926,7 +927,7 @@ export default function MapView({
                     </button>
                   ))
                 ) : (
-                  <p className="kg-empty-copy">这里还没有挂笔记或资料。</p>
+                  <p className="kg-empty-copy">这里还没有关联资料。</p>
                 )}
               </div>
               <div className="kg-inspector-section">
@@ -937,9 +938,9 @@ export default function MapView({
                       <span>＋</span>标记已学
                     </button>
                   ) : null}
-                  <button type="button" className="kg-secondary-action" onClick={() => onWriteNote(selected)}>
+                  <button type="button" className="kg-secondary-action" onClick={() => onLinkDocs(selected)}>
                     <span aria-hidden="true">＋</span>
-                    {selected.state === "marked" ? "补一篇笔记" : "写笔记"}
+                    关联知识库资料
                   </button>
                   <button type="button" className="kg-secondary-action" onClick={() => onOpenLibrary(selected)}>
                     <span>▤</span>在知识库查看
@@ -983,9 +984,9 @@ export default function MapView({
                 <p>
                   空心 = 尚未学过
                   <br />
-                  半亮 = 标记已学，但没有笔记
+                  半亮 = 标记已学，但没有关联资料
                   <br />
-                  发光 = 学过且留下笔记
+                  发光 = 学过且关联了资料
                   <br />
                   分类只表示接触过，不代表掌握。
                 </p>
@@ -1024,12 +1025,12 @@ export default function MapView({
               <button className="p-button" type="button" onClick={() => setPreviewDoc(null)}>
                 关闭
               </button>
-              {previewDoc.nodeId ? (
+              {docNodeIds(previewDoc).length ? (
                 <button
                   className="p-button primary"
                   type="button"
                   onClick={() => {
-                    const linked = nodes.find((node) => node.id === previewDoc.nodeId);
+                    const linked = nodes.find((node) => docNodeIds(previewDoc).includes(node.id));
                     setPreviewDoc(null);
                     if (linked) onOpenLibrary(linked);
                   }}
@@ -1100,7 +1101,7 @@ export default function MapView({
       {editOpen && selected ? (
         <Modal
           title="编辑节点标题"
-          subtitle="只改标题，节点下的笔记和状态不会丢。"
+          subtitle="只改标题，节点下的资料关联和状态不会丢。"
           onClose={() => setEditOpen(false)}
           footer={
             <>
@@ -1136,7 +1137,7 @@ export default function MapView({
       {deleteOpen && selected ? (
         <Modal
           title={`删除「${selected.title}」？`}
-          subtitle="只删除你自建的节点；它下面的自建节点会一起删除，笔记会移到上一级。"
+          subtitle="只删除你自建的节点；它下面的自建节点会一起删除，资料本身保留，仅解除绑定。"
           onClose={() => setDeleteOpen(false)}
           footer={
             <>
@@ -1159,7 +1160,7 @@ export default function MapView({
           }
         >
           <p className="p-sub">
-            当前节点下有 {childCount} 个直接子节点；相关笔记会保留并移动到上一级。
+            当前节点下有 {childCount} 个直接子节点；资料本身会保留，只解除这些节点的绑定。
           </p>
         </Modal>
       ) : null}
@@ -1188,7 +1189,7 @@ export default function MapView({
           }
         >
           <p className="p-sub" style={{ marginBottom: 14 }}>
-            没有笔记也算足迹，但周复盘会把它标出来。来源可选。
+            没有关联资料也算足迹，但周复盘会把它标出来。来源可选。
           </p>
           <div className="p-swatches">
             {["自学", "网课", "电子书", "其他"].map((source) => (
