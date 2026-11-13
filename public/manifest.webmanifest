@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "足迹 · 学习系统",
+  "short_name": "足迹",
+  "description": "只排内容，不排分钟。记录学过的足迹，用笔记和复盘留下证据。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#eef1f7",
+  "theme_color": "#2f5fa8",
+  "lang": "zh-CN",
+  "categories": ["education", "productivity"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

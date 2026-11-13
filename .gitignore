@@ -1,0 +1,26 @@
+node_modules/
+.next/
+out/
+.vercel/
+
+# 本地数据与产物
+.data/
+.taste-skill/
+.pnpm-store/
+.acl-recovery/
+materials/
+db/
+*.log
+.next-dev.log
+.next-dev.err.log
+tsconfig.tsbuildinfo
+
+# 本地环境
+.env
+.env.local
+.env.*.local
+
+# 生成文件
+next-env.d.ts
+.DS_Store
+Thumbs.db
