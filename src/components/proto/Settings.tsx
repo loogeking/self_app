@@ -60,6 +60,7 @@ export default function Settings({
   const [models, setModels] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelError, setModelError] = useState("");
+  const [manualModel, setManualModel] = useState(false);
 
   const saveAi = () => {
     if (!aiDraft.baseUrl.trim() || !aiDraft.model.trim()) {
@@ -118,6 +119,7 @@ export default function Settings({
       if (!response.ok) throw new Error(json.error ?? `HTTP ${response.status}`);
       const list = (json.models ?? []).filter(Boolean);
       setModels(list);
+      if (list.length) setManualModel(false);
       if (!list.length) {
         setModelError("接口没有返回模型 id；可以手动填写模型名。");
       } else if (!list.includes(aiDraft.model)) {
@@ -309,18 +311,47 @@ export default function Settings({
               </label>
               <label className="p-field">
                 模型
-                <input
-                  className="p-input"
-                  list="ai-model-list"
-                  value={aiDraft.model}
-                  onChange={(event) => setAiDraft({ ...aiDraft, model: event.target.value })}
-                  placeholder="deepseek-chat"
-                />
-                <datalist id="ai-model-list">
-                  {models.map((model) => (
-                    <option key={model} value={model} />
-                  ))}
-                </datalist>
+                {models.length && !manualModel ? (
+                  <select
+                    className="p-select"
+                    value={aiDraft.model}
+                    onChange={(event) => {
+                      if (event.target.value === "__manual") {
+                        setManualModel(true);
+                        return;
+                      }
+                      setAiDraft({ ...aiDraft, model: event.target.value });
+                    }}
+                  >
+                    {!models.includes(aiDraft.model) && aiDraft.model ? (
+                      <option value={aiDraft.model}>{aiDraft.model}（当前）</option>
+                    ) : null}
+                    {models.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                    <option value="__manual">手动输入其他模型名…</option>
+                  </select>
+                ) : (
+                  <>
+                    <input
+                      className="p-input"
+                      value={aiDraft.model}
+                      onChange={(event) => setAiDraft({ ...aiDraft, model: event.target.value })}
+                      placeholder="deepseek-chat"
+                    />
+                    {models.length ? (
+                      <button
+                        className="p-field-link"
+                        type="button"
+                        onClick={() => setManualModel(false)}
+                      >
+                        从解析列表选择
+                      </button>
+                    ) : null}
+                  </>
+                )}
               </label>
               <label className="p-field p-ai-wide">
                 Base URL

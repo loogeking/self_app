@@ -1301,3 +1301,14 @@ body {
   border-color: #2f5fa8;
 }
 .p-root.is-map-view .p-modal .p-button.ghost { background: transparent; }
+.p-field-link {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--p-accent);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.p-field-link:hover { text-decoration: underline; }
