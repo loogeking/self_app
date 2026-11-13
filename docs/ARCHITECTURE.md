@@ -4,6 +4,8 @@
 
 ![今日空状态](screenshots/today-empty.jpg)
 ![3D 知识地图](screenshots/map-3d.jpg)
+![知识库导入](screenshots/library-import.jpg)
+![复盘导入](screenshots/review-import.jpg)
 
 ## 1. 产品边界
 
@@ -40,7 +42,8 @@ docker build -t footprint .
 docker run --rm -p 3000:3000 footprint
 ```
 
-Vercel：导入仓库，Framework 选 Next.js，Build Command 为 `pnpm build`，不需要环境变量。
+Vercel：导入仓库，Framework 选 Next.js，Build Command 为 `pnpm build`，并配置环境变量 `APP_PASSWORD`。
+Docker 启动时同样需要 `-e APP_PASSWORD=...`。
 
 关键部署文件：
 
@@ -53,6 +56,17 @@ Vercel：导入仓库，Framework 选 Next.js，Build Command 为 `pnpm build`�
 | `scripts/start-standalone.mjs` | 本地启动 standalone server |
 | `public/manifest.webmanifest` | PWA 名称、图标、主题色 |
 
+## 2.1 访问密码
+
+- `APP_PASSWORD` 只存在环境变量和本机的 `.env.local`，不写入仓库。
+- `/api/login` 校验后写入 HttpOnly Cookie，内容为密码的 SHA-256 标识，不包含明文。
+- 根页面和 `/api/ai/chat` 都会校验 Cookie；未登录无法读取页面或调用 AI 代理。
+- 设置页提供“退出登录”。
+- 更换环境变量后，旧 Cookie 自动失效。
+- 首次加载旧版数据时会清除浏览器里旧的 API Key（仅一次），之后在设置里重新填写的新 Key 正常保留。
+
+![登录页](screenshots/login.jpg)
+
 ## 3. 目录
 
 ```text
@@ -62,7 +76,12 @@ Vercel：导入仓库，Framework 选 Next.js，Build Command 为 `pnpm build`�
 │  │  ├─ layout.tsx              根布局、元信息、PWA 注册
 │  │  ├─ page.tsx                唯一页面入口
 │  │  ├─ proto.css               全站样式、3D 地图样式、玻璃卡
-│  │  └─ api/ai/chat/route.ts    AI 请求代理
+│  │  ├─ login/page.tsx          访问密码登录
+│  │  └─ api/
+│  │     ├─ login/route.ts       校验密码并写 Cookie
+│  │     ├─ logout/route.ts      清除 Cookie
+│  │     └─ ai/chat/route.ts     AI 请求代理（需登录）
+│  ├─ lib/auth.ts                Cookie 哈希与会话校验
 │  ├─ components/
 │  │  ├─ PwaRegister.tsx         注册 service worker
 │  │  └─ proto/
@@ -76,7 +95,8 @@ Vercel：导入仓库，Framework 选 Next.js，Build Command 为 `pnpm build`�
 │  │     ├─ Assistant.tsx        全局助手抽屉
 │  │     ├─ data.ts              EMPTY / SEED 数据、408 节点
 │  │     ├─ map408.ts            从教材书签提取的 181 个节
-│  │     ├─ pomodoro.ts          SpreadsheetML .xls 解析
+│  │     ├─ pomodoro.ts          SpreadsheetML .xls 解析与汇总核对
+│  │     ├─ fileStore.ts         本机资料文件的 IndexedDB 存取
 │  │     ├─ types.ts             AppData / KNode / Doc / PlanItem 等类型
 │  │     └─ ui.tsx               时间格式、Donut、StackBar、Modal
 ├─ public/                       PWA 图标、manifest、service worker
@@ -158,9 +178,11 @@ localStorage 键名是 `footprint-v1`。
 
 `MapView.tsx` 没有引入 Three.js，使用 Canvas 2D 做三维投影：
 
-- `layoutGraph` 按父子关系生成 3D 坐标；
+- 考研地图包含 408、数学、英语、政治四个根，共 226 个节点；
+- `layoutGraph` 按父子关系生成 3D 坐标，408 居中，另外三个根在外围；
 - 每帧用 yaw / pitch / perspective 投影到屏幕；
 - 默认自动旋转，拖动改变旋转，滚轮或双指改变缩放；
+- 默认显示全部节点名称，可切“精简名称”降低密度；
 - 搜索会旋转视角把命中节点转到正面；
 - 节点状态用形状与亮度区分：空心 / 半亮 / 发光；
 - 只记录“接触过”，不表达掌握度。
@@ -199,7 +221,9 @@ localStorage 键名是 `footprint-v1`。
 - 按大类 / 科目分组；
 - 书、笔记、复盘在同一个架子上；
 - 类型只是筛选条件；
-- 文档卡片可以预览 Markdown、复盘事实和 PDF 摘要。
+- 可以导入 PDF、图片、Markdown；文件本体写入浏览器 IndexedDB（`fileStore.ts`）；
+- 文档卡片可预览 Markdown 正文、图片原图、PDF 原文件（浏览器 PDF 查看器）；
+- 导入的资料可以下载原始文件。
 
 ## 9. AI 配置与代理
 
@@ -216,7 +240,9 @@ localStorage 键名是 `footprint-v1`。
 - 客户端把当前配置和消息发到本站接口；
 - 服务端请求 `{baseUrl}/chat/completions`；
 - 不写日志、不落库、不把 Key 发送到配置之外的服务；
-- 允许 HTTPS；本地调试允许 `localhost` / `127.0.0.1`。
+- 需要登录 Cookie，未登录返回 401；
+- 允许 HTTPS；本地调试允许 `localhost` / `127.0.0.1`；
+- 首次加载旧版本数据时会清除浏览器中旧的 API Key，只清一次；之后填写的新 Key 正常保存。
 
 助手在 `Assistant.tsx` 中：
 
@@ -240,9 +266,9 @@ localStorage 键名是 `footprint-v1`。
 
 ## 11. 已知限制
 
-- 只有前端，数据存在浏览器，换设备不会同步。
-- 没有账号体系，部署到公网后任何访问者看到的是各自浏览器里的数据。
+- 数据存在浏览器，换设备不会同步；知识库文件存在 IndexedDB，清理站点数据会丢失。
+- 只有单密码门，没有多用户账号体系；同一部署的所有访问者共用密码，但各自看到自己的本地数据。
 - AI Key 是个人配置，不适合公共多租户。
-- 3D 地图是 Canvas 投影，不是 WebGL；212 节点性能足够，继续放大需要做 LOD。
-- 资料上传和云端 AI 计费尚未接后端。
-- 408 节点来自教材目录，其他大类保留样例骨架，用户可继续添加自己的节点。
+- 3D 地图是 Canvas 投影，不是 WebGL；226 节点性能足够，继续放大需要做 LOD。
+- 资料文件没有服务端存储，适合个人自托管/单浏览器使用；要做跨设备同步需接对象存储和数据库。
+- 408 节点来自教材目录，数学、英语、政治保留根节点和少量样例，用户可继续添加自己的节点。

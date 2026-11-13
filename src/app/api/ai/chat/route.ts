@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { AiConfig } from "@/components/proto/types";
+import { isAuthed } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +27,10 @@ function cleanMessages(input: unknown): Message[] {
 }
 
 export async function POST(request: Request) {
+  if (!(await isAuthed())) {
+    return NextResponse.json({ error: "请先登录。" }, { status: 401 });
+  }
+
   let body: Body;
   try {
     body = (await request.json()) as Body;

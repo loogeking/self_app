@@ -33,6 +33,9 @@ export type Doc = {
   body?: string;
   pages?: number;
   size?: string;
+  mime?: string;
+  fileKey?: string;
+  fileName?: string;
   updatedAt: string;
   tags?: string[];
 };

@@ -16,12 +16,19 @@ export type ParsePomodoroResult = {
   rows: ParsedPomodoroRow[];
   headers: string[];
   skipped: number;
+  declared: {
+    range?: string;
+    count?: number;
+    durationText?: string;
+    minutes?: number;
+  };
+  totalMinutes: number;
 };
 
 type CellValue = { index: number; text: string };
 
 const HEADER_MAP = {
-  start: ["开始时间", "开始日期", "日期"],
+  start: ["专注时间", "开始时间", "开始日期", "日期"],
   task: ["待办名称", "待办", "任务", "事项"],
   minutes: ["专注时长", "时长", "用时"],
   note: ["心得", "备注", "备注说明"],
@@ -33,8 +40,13 @@ function normalizeHeader(value: string): string {
   return value.replace(/[\s\u3000:：]+/g, "").trim();
 }
 
-function findColumn(headers: string[], names: string[]): number {
-  return headers.findIndex((header) => names.some((name) => header.includes(name)));
+function findColumn(cells: CellValue[], names: string[]): number {
+  return (
+    cells.find((cell) => {
+      const header = normalizeHeader(cell.text);
+      return names.some((name) => header.includes(name));
+    })?.index ?? -1
+  );
 }
 
 function getAttribute(element: Element, localName: string): string {
@@ -94,6 +106,13 @@ function parseExcelStart(raw: string): { date: string; start: string } | null {
   };
 }
 
+function parseDurationText(text: string): number | undefined {
+  const hour = text.match(/(\d+)\s*(?:小时|h)/i);
+  const minute = text.match(/(\d+)\s*(?:分钟|分|min)/i);
+  if (!hour && !minute) return undefined;
+  return (hour ? Number(hour[1]) * 60 : 0) + (minute ? Number(minute[1]) : 0);
+}
+
 function shortHash(value: string): string {
   let hash = 5381;
   for (let i = 0; i < value.length; i += 1) hash = (hash * 33) ^ value.charCodeAt(i);
@@ -112,21 +131,54 @@ export function parsePomodoroSpreadsheetXml(xml: string, fileName = "番茄Todo�
   const rows = Array.from(document.getElementsByTagName("*")).filter((element) => element.localName === "Row");
   if (!rows.length) throw new Error("文件里没有表格行，可能是空的导出文件。");
 
-  const headerCells = cellsOf(rows[0]);
+  // 番茄Todo 的实际导出前面有标题、导出范围等行，不能假设第一行是表头。
+  let headerIndex = -1;
+  let headerCells: CellValue[] = [];
+  for (let index = 0; index < Math.min(rows.length, 30); index += 1) {
+    const cells = cellsOf(rows[index]);
+    if (!cells.length) continue;
+    if (
+      findColumn(cells, HEADER_MAP.task) >= 0 &&
+      findColumn(cells, HEADER_MAP.minutes) >= 0 &&
+      findColumn(cells, HEADER_MAP.start) >= 0
+    ) {
+      headerIndex = index;
+      headerCells = cells;
+      break;
+    }
+  }
+  if (headerIndex < 0) {
+    throw new Error("找不到表头：需要「专注时间 / 待办名称 / 专注时长」列。");
+  }
+
   const headers = headerCells.map((cell) => cell.text).filter(Boolean);
-  const startColumn = findColumn(headers, HEADER_MAP.start);
-  const taskColumn = findColumn(headers, HEADER_MAP.task);
-  const minuteColumn = findColumn(headers, HEADER_MAP.minutes);
-  const noteColumn = findColumn(headers, HEADER_MAP.note);
-  const statusColumn = findColumn(headers, HEADER_MAP.status);
-  const completionColumn = findColumn(headers, HEADER_MAP.completion);
-  if (startColumn < 0 || taskColumn < 0 || minuteColumn < 0) {
-    throw new Error("找不到「开始时间 / 待办名称 / 专注时长」列，请检查导出字段。");
+  const startColumn = findColumn(headerCells, HEADER_MAP.start);
+  const taskColumn = findColumn(headerCells, HEADER_MAP.task);
+  const minuteColumn = findColumn(headerCells, HEADER_MAP.minutes);
+  const noteColumn = findColumn(headerCells, HEADER_MAP.note);
+  const statusColumn = findColumn(headerCells, HEADER_MAP.status);
+  const completionColumn = findColumn(headerCells, HEADER_MAP.completion);
+
+  const declared: ParsePomodoroResult["declared"] = {};
+  for (const row of rows.slice(0, headerIndex)) {
+    for (const cell of cellsOf(row)) {
+      const text = cell.text.replace(/\s+/g, " ").trim();
+      if (!text) continue;
+      const range = text.match(/导出范围[:：]\s*(.+)$/);
+      if (range) declared.range = range[1].trim();
+      const count = text.match(/共\s*(\d+)\s*条记录/);
+      if (count) declared.count = Number(count[1]);
+      const duration = text.match(/时长共计([^（(]+)/);
+      if (duration) {
+        declared.durationText = duration[1].trim();
+        declared.minutes = parseDurationText(declared.durationText);
+      }
+    }
   }
 
   const parsed: ParsedPomodoroRow[] = [];
   let skipped = 0;
-  for (const row of rows.slice(1)) {
+  for (const row of rows.slice(headerIndex + 1)) {
     const cells = cellsOf(row);
     if (!cells.length) continue;
     const at = (index: number) => (index >= 0 ? cells.find((cell) => cell.index === index)?.text ?? "" : "");
@@ -152,8 +204,15 @@ export function parsePomodoroSpreadsheetXml(xml: string, fileName = "番茄Todo�
     });
   }
 
-  if (!parsed.length) throw new Error("没有解析到有效记录：开始时间或待办名称为空。");
-  return { fileName, rows: parsed, headers, skipped };
+  if (!parsed.length) throw new Error("没有解析到有效记录：专注时间或待办名称为空。");
+  return {
+    fileName,
+    rows: parsed,
+    headers,
+    skipped,
+    declared,
+    totalMinutes: parsed.reduce((total, row) => total + row.minutes, 0),
+  };
 }
 
 export function classifyPomodoroTask(

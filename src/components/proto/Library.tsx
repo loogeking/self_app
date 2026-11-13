@@ -1,12 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppData, Doc, DocKind, KNode, Space } from "./types";
 import { CAT_COLOR, CAT_LABEL, Markdownish, Modal, fmtMin, sum } from "./ui";
+import { getLocalFile, putLocalFile } from "./fileStore";
+import { TODAY } from "./data";
 
 type Props = {
   data: AppData;
   activeSpace: string;
+  onAddDocs: (docs: Doc[]) => void;
   onToast: (text: string) => void;
   focusNodeId?: string | null;
   onClearFocus?: () => void;
@@ -32,10 +35,139 @@ function nodeLabel(nodes: KNode[], nodeId?: string): string {
   return n?.title ?? "未挂节点";
 }
 
-export default function Library({ data, activeSpace, onToast, focusNodeId, onClearFocus }: Props) {
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function kindOf(file: File): DocKind | null {
+  if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) return "pdf";
+  if (file.type.startsWith("image/")) return "image";
+  if (
+    file.type === "text/markdown" ||
+    file.type === "text/plain" ||
+    /\.(md|markdown|txt)$/i.test(file.name)
+  ) {
+    return "md";
+  }
+  return null;
+}
+
+export default function Library({
+  data,
+  activeSpace,
+  onAddDocs,
+  onToast,
+  focusNodeId,
+  onClearFocus,
+}: Props) {
   const [kind, setKind] = useState<"all" | DocKind>("all");
   const [query, setQuery] = useState("");
   const [preview, setPreview] = useState<Doc | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setPreviewUrl(null);
+    setPreviewLoading(Boolean(preview?.fileKey));
+    if (preview?.fileKey) {
+      void getLocalFile(preview.fileKey)
+        .then((blob) => {
+          if (cancelled || !blob) return;
+          objectUrl = URL.createObjectURL(blob);
+          setPreviewUrl(objectUrl);
+        })
+        .catch(() => {
+          if (!cancelled) setPreviewLoading(false);
+        })
+        .finally(() => {
+          if (!cancelled) setPreviewLoading(false);
+        });
+    }
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [preview]);
+
+  const importFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const targetNode = focusNodeId ? data.nodes.find((node) => node.id === focusNodeId) : null;
+    const spaceId = targetNode?.spaceId ?? (activeSpace !== "all" ? activeSpace : data.spaces[0]?.id);
+    if (!spaceId) {
+      onToast("先建一个大类，再导入资料。");
+      return;
+    }
+    setImporting(true);
+    const next: Doc[] = [];
+    try {
+      for (const [index, file] of Array.from(files).entries()) {
+        const kind = kindOf(file);
+        if (!kind) {
+          onToast(`跳过不支持的格式：${file.name}`);
+          continue;
+        }
+        const id = `d-local-${Date.now()}-${index}`;
+        const fileKey = `file-${id}`;
+        await putLocalFile(fileKey, file);
+        const body = kind === "md" ? await file.text() : undefined;
+        const summary =
+          kind === "md"
+            ? (body ?? "").replace(/[#>*_`~-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 90) || "本机导入的 Markdown"
+            : kind === "pdf"
+              ? "本机导入的 PDF；原始文件保存在浏览器 IndexedDB。"
+              : "本机导入的图片。";
+        next.push({
+          id,
+          spaceId,
+          nodeId: targetNode?.id,
+          title: file.name.replace(/\.[^.]+$/, ""),
+          fileName: file.name,
+          kind,
+          summary,
+          body,
+          size: formatSize(file.size),
+          mime: file.type || undefined,
+          fileKey,
+          updatedAt: TODAY,
+        });
+      }
+      if (next.length) onAddDocs(next);
+    } catch (error) {
+      onToast(`导入失败：${error instanceof Error ? error.message : "无法写入本机文件库"}`);
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const downloadPreview = async () => {
+    if (!preview) return;
+    try {
+      const blob = preview.fileKey
+        ? await getLocalFile(preview.fileKey)
+        : preview.body
+          ? new Blob([preview.body], { type: "text/markdown;charset=utf-8" })
+          : null;
+      if (!blob) {
+        onToast("这份资料没有原始文件，无法下载。");
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = preview.fileName ?? preview.title;
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch {
+      onToast("读取原始文件失败。");
+    }
+  };
 
   const docs = useMemo(() => {
     let list = data.docs.filter((d) => activeSpace === "all" || d.spaceId === activeSpace);
@@ -154,8 +286,22 @@ export default function Library({ data, activeSpace, onToast, focusNodeId, onCle
             placeholder="搜标题 / 摘要 / 正文…"
           />
         </div>
-        <button className="p-button primary" type="button" onClick={() => onToast("当前版本的上传入口还未接后端；可以先从地图节点写笔记。")}>
-          ＋ 上传
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept=".pdf,image/*,.md,.markdown,.txt,text/markdown,text/plain,application/pdf"
+          style={{ display: "none" }}
+          onChange={(event) => void importFiles(event.target.files)}
+        />
+        <button
+          className="p-button primary"
+          type="button"
+          disabled={importing}
+          onClick={() => fileInputRef.current?.click()}
+          title="文件保存在本机浏览器 IndexedDB"
+        >
+          {importing ? "正在导入…" : "＋ 导入文件"}
         </button>
       </div>
 
@@ -233,7 +379,7 @@ export default function Library({ data, activeSpace, onToast, focusNodeId, onCle
           wide
           footer={
             <>
-              <button className="p-button" type="button" onClick={() => onToast("当前版本未接文件存储，下载功能需要后端支持。")}>
+              <button className="p-button" type="button" onClick={() => void downloadPreview()}>
                 下载
               </button>
               <button className="p-button primary" type="button" onClick={() => setPreview(null)}>
@@ -290,7 +436,15 @@ export default function Library({ data, activeSpace, onToast, focusNodeId, onCle
             </div>
 
             <div>
-              {preview.kind === "pdf" ? (
+              {preview.kind === "pdf" && preview.fileKey ? (
+                previewUrl ? (
+                  <iframe className="p-pdf-frame" src={previewUrl} title={preview.title} />
+                ) : (
+                  <div className="p-preview-loading">
+                    {previewLoading ? "正在读取本机 PDF…" : "没有读到原始 PDF 文件。"}
+                  </div>
+                )
+              ) : preview.kind === "pdf" ? (
                 <div className="p-preview-page">
                   <div style={{ fontSize: 9, letterSpacing: "0.18em", color: "#8a8f84", marginBottom: 18 }}>
                     {previewSpace?.name} · {nodeLabel(data.nodes, preview.nodeId)}
@@ -338,6 +492,14 @@ export default function Library({ data, activeSpace, onToast, focusNodeId, onCle
                     <Markdownish text={preview.body ?? ""} />
                   </div>
                 </div>
+              ) : preview.kind === "image" && preview.fileKey ? (
+                previewUrl ? (
+                  <img className="p-image-preview" src={previewUrl} alt={preview.title} />
+                ) : (
+                  <div className="p-preview-loading">
+                    {previewLoading ? "正在读取本机图片…" : "没有读到原始图片文件。"}
+                  </div>
+                )
               ) : (
                 <div
                   style={{

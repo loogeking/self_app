@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { AppData, PlanStatus, Session } from "./types";
+import type { AppData, ImportBatch, PlanStatus, Session, TaskRoute } from "./types";
 import { TODAY } from "./data";
 import {
   CAT_COLOR,
   CAT_LABEL,
   Donut,
+  Modal,
   StackBar,
   STATUS_LABEL,
   fmtDateTime,
@@ -15,12 +16,21 @@ import {
   sum,
   weekdayCN,
 } from "./ui";
+import {
+  classifyPomodoroTask,
+  parsePomodoroSpreadsheetXml,
+  pomodoroKey,
+  toSession,
+  type ParsePomodoroResult,
+  type ParsedPomodoroRow,
+} from "./pomodoro";
 
 type Props = {
   data: AppData;
   activeSpace: string;
   initialDate?: string;
   onSaveReview: (date: string, text: string, tags: string[]) => void;
+  onImport: (rows: Session[], batch: ImportBatch, routes: Record<string, TaskRoute>) => void;
   onToast: (text: string) => void;
 };
 
@@ -46,7 +56,7 @@ function statusCounts(plans: { status: PlanStatus }[]) {
   return out;
 }
 
-export default function Review({ data, activeSpace, initialDate, onSaveReview, onToast }: Props) {
+export default function Review({ data, activeSpace, initialDate, onSaveReview, onImport, onToast }: Props) {
   const dates = useMemo(() => {
     const set = new Set<string>(data.reviews.map((r) => r.date));
     set.add(TODAY);
@@ -63,6 +73,13 @@ export default function Review({ data, activeSpace, initialDate, onSaveReview, o
 
   const [draft, setDraft] = useState(data.reviews.find((r) => r.date === date)?.text ?? "");
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importRows, setImportRows] = useState<ParsedPomodoroRow[]>([]);
+  const [importName, setImportName] = useState("");
+  const [importSkipped, setImportSkipped] = useState(0);
+  const [importError, setImportError] = useState("");
+  const [declared, setDeclared] = useState<ParsePomodoroResult["declared"]>({});
+  const [parsedMinutes, setParsedMinutes] = useState(0);
 
   useEffect(() => {
     if (initialDate) setDate(initialDate);
@@ -120,6 +137,75 @@ export default function Review({ data, activeSpace, initialDate, onSaveReview, o
     onToast("已保存到知识库「复盘」");
   };
 
+  const duplicateCount = useMemo(() => {
+    const existing = new Set(data.sessions.map((s) => `${s.date}|${s.start}|${s.task.trim()}`));
+    return importRows.filter((row) => existing.has(pomodoroKey(row))).length;
+  }, [importRows, data.sessions]);
+
+  const newCount = importRows.length - duplicateCount;
+  const countMismatch = declared.count !== undefined && importRows.length !== declared.count;
+  const minutesMismatch = declared.minutes !== undefined && parsedMinutes !== declared.minutes;
+  const importBlocked = countMismatch || minutesMismatch;
+
+  const readImport = async (file: File) => {
+    setImportName(file.name);
+    setImportRows([]);
+    setImportError("");
+    setImportSkipped(0);
+    setDeclared({});
+    setParsedMinutes(0);
+    try {
+      const result = parsePomodoroSpreadsheetXml(await file.text(), file.name);
+      setImportRows(result.rows);
+      setImportSkipped(result.skipped);
+      setDeclared(result.declared);
+      setParsedMinutes(result.totalMinutes);
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : "文件解析失败。");
+    }
+  };
+
+  const confirmImport = () => {
+    const importedAt = new Date().toISOString();
+    const routes: Record<string, TaskRoute> = {};
+    for (const task of new Set(importRows.map((row) => row.task))) {
+      routes[task] = classifyPomodoroTask(task, data.prefs.taskRoutes ?? {});
+    }
+    const seen = new Set(data.sessions.map((s) => `${s.date}|${s.start}|${s.task.trim()}`));
+    const fresh: ParsedPomodoroRow[] = [];
+    let duplicates = 0;
+    for (const row of importRows) {
+      const key = pomodoroKey(row);
+      if (seen.has(key)) {
+        duplicates += 1;
+        continue;
+      }
+      seen.add(key);
+      fresh.push(row);
+    }
+    const rows = fresh.map((row) => toSession(row, routes[row.task], importedAt));
+    const dates = rows.map((row) => row.date).sort();
+    const batch: ImportBatch = {
+      id: `import-${Date.now()}`,
+      fileName: importName,
+      importedAt,
+      rows: rows.length,
+      duplicates,
+      from: dates[0] ?? TODAY,
+      to: dates[dates.length - 1] ?? TODAY,
+    };
+    onImport(rows, batch, routes);
+    const latest = dates[dates.length - 1];
+    if (latest) setDate(latest);
+    setTab("daily");
+    setImportOpen(false);
+    onToast(
+      rows.length
+        ? `已读入 ${rows.length} 条番茄记录${duplicates ? `，跳过 ${duplicates} 条重复` : ""}。原文件未保存。`
+        : `没有新记录：${duplicates} 条已经存在。`,
+    );
+  };
+
   const headline = activeSpace === "all"
     ? `本周学习 ${fmtMin(wStudy)}，计划 ${fmtMin(wPlan)}，娱乐 ${fmtMin(wLeisure)}。${partialPlans.length} 件部分完成，${deferredPlans.length} 件延期。`
     : `${spaceName}：本周学习 ${fmtMin(wStudy)}，计划 ${fmtMin(wPlan)}，娱乐 ${fmtMin(wLeisure)}；${done}/${plans.length} 件完成。`;
@@ -156,12 +242,17 @@ export default function Review({ data, activeSpace, initialDate, onSaveReview, o
         </div>
       </header>
 
-      <div className="p-review-tabs">
-        <button type="button" className={tab === "daily" ? "is-on" : ""} onClick={() => setTab("daily")}>
-          每日复盘
-        </button>
-        <button type="button" className={tab === "weekly" ? "is-on" : ""} onClick={() => setTab("weekly")}>
-          每周统计
+      <div className="p-review-bar">
+        <div className="p-review-tabs">
+          <button type="button" className={tab === "daily" ? "is-on" : ""} onClick={() => setTab("daily")}>
+            每日复盘
+          </button>
+          <button type="button" className={tab === "weekly" ? "is-on" : ""} onClick={() => setTab("weekly")}>
+            每周统计
+          </button>
+        </div>
+        <button className="p-button sm" type="button" onClick={() => setImportOpen(true)}>
+          导入番茄记录
         </button>
       </div>
 
@@ -561,6 +652,98 @@ export default function Review({ data, activeSpace, initialDate, onSaveReview, o
           </section>
         </div>
       )}
+
+      {importOpen ? (
+        <Modal
+          title="导入番茄Todo历史记录"
+          subtitle="只读入记录数据，不保存原文件。表头会自动查找，导入前核对文件声明的条数和时长。"
+          onClose={() => setImportOpen(false)}
+          wide
+          footer={
+            <>
+              <button className="p-button" type="button" onClick={() => setImportOpen(false)}>
+                取消
+              </button>
+              <button
+                className="p-button primary"
+                type="button"
+                disabled={!importRows.length || newCount === 0 || importBlocked}
+                onClick={confirmImport}
+              >
+                {importBlocked
+                  ? "数据核对不一致"
+                  : newCount
+                    ? `读入 ${newCount} 条`
+                    : importRows.length
+                      ? "这些记录都已存在"
+                      : "先选择文件"}
+              </button>
+            </>
+          }
+        >
+          <label className="p-file-drop">
+            <input
+              type="file"
+              accept=".xls,.xml,text/xml,application/xml,application/vnd.ms-excel"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void readImport(file);
+              }}
+            />
+            <span>{importName || "选择番茄Todo导出的 .xls 历史记录"}</span>
+            <small>
+              兼容「专注时间 / 待办名称 / 专注时长」表头；支持表中带标题和导出范围说明的原始文件。
+            </small>
+          </label>
+
+          {importError ? <p className="p-inline-error">{importError}</p> : null}
+
+          {importRows.length ? (
+            <>
+              <div className={`p-import-check${importBlocked ? " is-bad" : " is-ok"}`}>
+                <strong>{importBlocked ? "核对不一致，先不要导入" : "数据核对通过"}</strong>
+                <span>
+                  {declared.count !== undefined || declared.durationText
+                    ? `文件声明：${declared.count ?? "?"} 条 / ${declared.durationText ?? "未写时长"}`
+                    : "文件未提供汇总信息"}
+                </span>
+                <span>
+                  实际解析：{importRows.length} 条 / {fmtMin(parsedMinutes)}
+                </span>
+                {declared.range ? <span>导出范围：{declared.range}</span> : null}
+                {importSkipped ? <span>跳过 {importSkipped} 条缺时间或待办名称的记录</span> : null}
+                {duplicateCount ? <span>已有 {duplicateCount} 条，不重复写入</span> : null}
+              </div>
+
+              <div className="p-import-table-wrap">
+                <table className="p-import-table">
+                  <thead>
+                    <tr>
+                      <th>开始时间</th>
+                      <th>待办</th>
+                      <th>时长</th>
+                      <th>心得</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importRows.slice(0, 8).map((row) => (
+                      <tr key={row.id}>
+                        <td>{fmtDateTime(row.date, row.start)}</td>
+                        <td>{row.task}</td>
+                        <td>{fmtMin(row.minutes)}</td>
+                        <td>{row.note ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="p-import-note">
+                按「日期 + 开始时间 + 待办名称」去重；0 分钟记录保留但不计入时长。分类沿用设置里的番茄Todo映射。
+              </p>
+            </>
+          ) : null}
+        </Modal>
+      ) : null}
     </div>
   );
 }

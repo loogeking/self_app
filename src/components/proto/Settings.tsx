@@ -429,6 +429,17 @@ export default function Settings({
               >
                 载入示例数据
               </button>
+              <button
+                className="p-button ghost sm"
+                type="button"
+                onClick={() => {
+                  void fetch("/api/logout", { method: "POST" }).finally(() => {
+                    window.location.replace("/login");
+                  });
+                }}
+              >
+                退出登录
+              </button>
             </div>
           </section>
         </div>

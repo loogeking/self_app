@@ -55,7 +55,7 @@ function layoutGraph(nodes: KNode[]): Layout {
     layout.set(node.id, { node, x, y, z: 0, depth, root });
     anchors.set(node.id, { x, y });
     (children.get(node.id) ?? []).forEach((child, index, siblings) => {
-      if (depth === 0 && roots.length === 1) {
+      if (node.id === "ky-408") {
         const point = subjects[index % subjects.length];
         place(child, point.x, point.y, 1, root);
         return;
@@ -72,15 +72,28 @@ function layoutGraph(nodes: KNode[]): Layout {
       );
     });
   };
-  roots.forEach((root, index) =>
-    place(
-      root,
-      roots.length === 1 ? 0.5 : 0.25 + (index % 3) * 0.25,
-      roots.length === 1 ? 0.5 : 0.3 + Math.floor(index / 3) * 0.35,
-      0,
-      root.id,
-    ),
-  );
+  const has408 = roots.some((root) => root.id === "ky-408");
+  let outer = 0;
+  roots.forEach((root, index) => {
+    if (root.id === "ky-408" || roots.length === 1) {
+      place(root, 0.5, 0.5, 0, root.id);
+      return;
+    }
+    if (has408) {
+      const corners = [
+        { x: 0.1, y: 0.18 },
+        { x: 0.9, y: 0.18 },
+        { x: 0.1, y: 0.84 },
+        { x: 0.9, y: 0.84 },
+      ];
+      const corner = corners[outer % corners.length];
+      outer += 1;
+      place(root, corner.x, corner.y, 0, root.id);
+      return;
+    }
+    const angle = -Math.PI / 2 + (index / roots.length) * Math.PI * 2;
+    place(root, 0.5 + Math.cos(angle) * 0.28, 0.5 + Math.sin(angle) * 0.28, 0, root.id);
+  });
 
   // 3D: keep the cluster geometry, add root-specific depth and deterministic jitter.
   const rootIndex = new Map(roots.map((root, index) => [root.id, index]));
@@ -148,10 +161,11 @@ export default function MapView({
   );
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(1.3);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [autoRotate, setAutoRotate] = useState(true);
+  const [showAllLabels, setShowAllLabels] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(["ky-408", "ky-408-ds"]));
   const [markOpen, setMarkOpen] = useState(false);
   const [markSource, setMarkSource] = useState("自学");
@@ -173,7 +187,7 @@ export default function MapView({
   const rotationRef = useRef({
     yaw: -0.38,
     pitch: 0.2,
-    zoom: 1,
+    zoom: 1.3,
     dragging: false,
     moved: 0,
     lastX: 0,
@@ -221,6 +235,9 @@ export default function MapView({
       setLeftOpen(false);
       setRightOpen(false);
     }
+    const initialZoom = window.innerWidth < 620 ? 1 : 1.3;
+    rotationRef.current.zoom = initialZoom;
+    setZoom(initialZoom);
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setAutoRotate(false);
       autoRef.current = false;
@@ -455,6 +472,7 @@ export default function MapView({
         }
 
         const showLabel =
+          showAllLabels ||
           isRoot ||
           item.depth <= 1 ||
           hot ||
@@ -463,17 +481,28 @@ export default function MapView({
           (item.depth >= 3 && rot.zoom > 1.2 && item.alpha > 0.68 && hash(item.node.id) > 0.55);
         if (showLabel) {
           const label = shortLabel(item.node.title);
-          const fontSize = item.depth <= 1 ? 12.5 : item.depth === 2 ? 10.5 : 9.5;
+          const fontSize = showAllLabels
+            ? item.depth <= 1
+              ? 12
+              : item.depth === 2
+                ? 9.5
+                : 8.4
+            : item.depth <= 1
+              ? 12.5
+              : item.depth === 2
+                ? 10.5
+                : 9.5;
+          context.globalAlpha = alpha < 0.1 ? alpha : showAllLabels ? Math.max(0.52, alpha) : alpha;
           context.font = `${item.depth <= 1 ? 600 : 400} ${fontSize}px "Segoe UI", "PingFang SC", sans-serif`;
           context.fillStyle = hot
             ? PALE
             : item.node.state === "noted"
               ? "rgba(235, 243, 252, .95)"
-              : "rgba(185, 204, 224, .82)";
+              : "rgba(194, 212, 231, .9)";
           const rightSide = item.sx > width * 0.7;
           context.textAlign = rightSide ? "right" : "left";
-          const labelX = item.sx + (rightSide ? -radius - 6 : radius + 6);
-          const labelY = item.sy + fontSize / 3;
+          const labelX = item.sx + (rightSide ? -radius - 5 : radius + 5);
+          const labelY = item.sy + fontSize / 3 + (showAllLabels ? (hash(item.node.id) - 0.5) * 4 : 0);
           const textWidth = context.measureText(label).width;
           const box = {
             x: labelX + (rightSide ? -textWidth : 0),
@@ -490,10 +519,11 @@ export default function MapView({
                 box.y + box.height < other.y
               ),
           );
-          if (!clash || hot || selectedId === item.node.id) {
+          if (showAllLabels || !clash || hot || selectedId === item.node.id) {
             labels.push(box);
             context.fillText(label, labelX, labelY);
           }
+          context.globalAlpha = alpha;
         }
         context.globalAlpha = 1;
       });
@@ -505,7 +535,7 @@ export default function MapView({
       cancelAnimationFrame(animation);
       observer.disconnect();
     };
-  }, [accent, filter, layout, matchingIds, nodes, selectedId]);
+  }, [accent, filter, layout, matchingIds, nodes, selectedId, showAllLabels]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -590,10 +620,10 @@ export default function MapView({
     const rot = rotationRef.current;
     rot.yaw = -0.38;
     rot.pitch = 0.2;
-    rot.zoom = 1;
+    rot.zoom = window.innerWidth < 620 ? 1 : 1.3;
     rot.target = null;
     rot.interactionUntil = performance.now() + 500;
-    setZoom(1);
+    setZoom(rot.zoom);
   };
 
   const focusNode = (node: KNode) => {
@@ -613,7 +643,7 @@ export default function MapView({
         <div className="kg-toolbar-title">
           <span className="kg-app-dot" />
           <div>
-            <strong>{space.name}{space.id === "ky" ? " / 408" : ""}</strong>
+            <strong>{space.name}</strong>
             <span>3D 学习足迹 · 只记录接触与笔记</span>
           </div>
         </div>
@@ -666,6 +696,14 @@ export default function MapView({
               </button>
             ))}
           </div>
+          <button
+            className={`kg-toolbar-panel-button${showAllLabels ? " is-on" : ""}`}
+            type="button"
+            aria-pressed={showAllLabels}
+            onClick={() => setShowAllLabels((value) => !value)}
+          >
+            {showAllLabels ? "全部名称" : "精简名称"}
+          </button>
           <button
             className={`kg-toolbar-panel-button kg-rotate-button${autoRotate ? " is-on" : ""}`}
             type="button"
@@ -752,7 +790,7 @@ export default function MapView({
             <div className="kg-breadcrumb">
               <span>{space.name}</span>
               <i>/</i>
-              <span>{space.id === "ky" ? "408" : "足迹"}</span>
+              <span>{roots.length} 个根</span>
               <i>/</i>
               <strong>{selected?.title ?? "全景"}</strong>
             </div>

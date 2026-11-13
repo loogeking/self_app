@@ -25,6 +25,7 @@ import Assistant from "./Assistant";
 import { Modal, weekdayCN } from "./ui";
 
 const KEY = "footprint-v1";
+const AI_CLEAR_KEY = "footprint-ai-key-cleared-v1";
 
 const NAV: { key: View; label: string }[] = [
   { key: "today", label: "今日" },
@@ -68,6 +69,19 @@ export default function Prototype() {
 
   useEffect(() => {
     try {
+      // 清理旧版本可能存下的 API Key；只清一次，之后在设置里重新填写的 Key 会正常保留。
+      if (!localStorage.getItem(AI_CLEAR_KEY)) {
+        const raw = localStorage.getItem(KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as AppData;
+          if (parsed.ai?.apiKey) {
+            parsed.ai = { ...parsed.ai, apiKey: "" };
+            localStorage.setItem(KEY, JSON.stringify(parsed));
+          }
+        }
+        localStorage.removeItem("proto-v4");
+        localStorage.setItem(AI_CLEAR_KEY, "1");
+      }
       const raw = localStorage.getItem(KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as AppData;
@@ -143,13 +157,7 @@ export default function Prototype() {
   };
 
   const mapSpace = data.spaces.find((s) => s.id === activeSpace) ?? data.spaces[0] ?? null;
-  const mapNodes = mapSpace
-    ? data.nodes.filter(
-        (n) =>
-          n.spaceId === mapSpace.id &&
-          (mapSpace.id !== "ky" || n.id === "ky-408" || n.id.startsWith("ky-408-")),
-      )
-    : [];
+  const mapNodes = mapSpace ? data.nodes.filter((n) => n.spaceId === mapSpace.id) : [];
   const mapNodeIds = new Set(mapNodes.map((n) => n.id));
   const mapDocs = mapSpace
     ? data.docs.filter((d) => d.spaceId === mapSpace.id && (!d.nodeId || mapNodeIds.has(d.nodeId)))
@@ -237,6 +245,12 @@ export default function Prototype() {
   };
 
   const updateAi = (ai: AiConfig) => setData((d) => ({ ...d, ai }));
+
+  const addDocs = (docs: Doc[]) => {
+    if (!docs.length) return;
+    setData((d) => ({ ...d, docs: [...docs, ...d.docs] }));
+    showToast(`已导入 ${docs.length} 份资料到本机资料库。`);
+  };
 
   const addPlan = (p: PlanItem) => {
     setData((d) => ({ ...d, plans: [p, ...d.plans] }));
@@ -555,6 +569,7 @@ export default function Prototype() {
             activeSpace={activeSpace}
             focusNodeId={libraryFocus}
             onClearFocus={() => setLibraryFocus(null)}
+            onAddDocs={addDocs}
             onToast={showToast}
           />
         ) : null}
@@ -566,6 +581,7 @@ export default function Prototype() {
             activeSpace={activeSpace}
             initialDate={reviewInitial}
             onSaveReview={saveReview}
+            onImport={importSessions}
             onToast={showToast}
           />
         ) : null}
