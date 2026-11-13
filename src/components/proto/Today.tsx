@@ -392,12 +392,16 @@ export default function Today({
                 <em>{recentDocs.length} 份</em>
               </div>
               <div className="p-doc-mini-list">
-                {recentDocs.map((d) => (
-                  <button key={d.id} type="button" className="p-doc-mini" onClick={() => onOpenDoc(d)}>
-                    <span>{d.title}</span>
-                    <time>{d.updatedAt}</time>
-                  </button>
-                ))}
+                {recentDocs.length ? (
+                  recentDocs.map((d) => (
+                    <button key={d.id} type="button" className="p-doc-mini" onClick={() => onOpenDoc(d)}>
+                      <span>{d.title}</span>
+                      <time>{d.updatedAt}</time>
+                    </button>
+                  ))
+                ) : (
+                  <p className="p-note">还没有入库资料。地图节点里写的第一篇笔记会出现在这里。</p>
+                )}
               </div>
             </section>
           </div>
@@ -447,13 +451,13 @@ export default function Today({
                 </div>
               ))}
             </div>
-            <p className="p-source-line">
-              {importedToday
-                ? `${importedToday} 条来自番茄Todo导入${seedToday ? `，${seedToday} 条为示例记录` : ""}。`
-                : todaySessions.length
-                  ? "当前显示示例记录。导入自己的 .xls 后，复盘只使用实际导入的数据。"
-                  : "今天还没有导入记录。"}
-            </p>
+            {todaySessions.length ? (
+              <p className="p-source-line">
+                {importedToday
+                  ? `${importedToday} 条来自番茄Todo导入${seedToday ? `，${seedToday} 条为示例记录` : ""}。`
+                  : "当前显示示例记录。导入自己的 .xls 后，复盘只使用实际导入的数据。"}
+              </p>
+            ) : null}
           </section>
 
           <section className="p-card p-quote-card">
@@ -475,10 +479,18 @@ export default function Today({
           <section className="p-card">
             <div className="p-card-head">
               <h2>本周承诺</h2>
-              <em>{data.plans.filter((p) => p.status === "done").length} 件完成</em>
+              <em>
+                {data.plans.filter((p) => (activeSpace === "all" || p.spaceId === activeSpace) && p.status === "done").length} 件完成
+              </em>
             </div>
             <div className="p-commit-list">
-              {data.plans.slice(0, 4).map((p) => (
+              {data.plans.filter((p) => activeSpace === "all" || p.spaceId === activeSpace).length === 0 ? (
+                <p className="p-note">本周还没有承诺。去计划里新建一条内容。</p>
+              ) : null}
+              {data.plans
+                .filter((p) => activeSpace === "all" || p.spaceId === activeSpace)
+                .slice(0, 4)
+                .map((p) => (
                 <div key={p.id} className="p-commit-row">
                   <span className={`p-status ${p.status}`}>
                     {p.status === "done"
