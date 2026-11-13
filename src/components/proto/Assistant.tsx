@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AppData, KNode, PlanItem, Situation, Space, View } from "./types";
-import { fmtMin, sum } from "./ui";
+import type { AiPulse, AppData, Doc, KNode, NewMapNode, PlanItem, Situation, Space, View } from "./types";
+import { fmtMin, Modal, sum } from "./ui";
+import PdfMap from "./PdfMap";
 
 type Action = { verb: string; title: string; detail?: string; why?: string };
 type Proposal = {
@@ -29,10 +30,12 @@ type Props = {
   view: View;
   activeSpace: string;
   selectedNode: KNode | null;
+  pulse?: AiPulse | null;
   situationSpace?: Space | null;
   onSaveSituation: (spaceId: string, situation: Situation, deadline?: string) => void;
   onEditSituation?: (space: Space) => void;
   onDoneSituation?: () => void;
+  onApplyAiMap: (spaceId: string, nodes: NewMapNode[], docId: string, rootId: string | null) => void;
   onAddPlans: (items: PlanItem[]) => void;
   onReschedule: () => void;
   onToast: (text: string) => void;
@@ -92,10 +95,12 @@ export default function Assistant({
   view,
   activeSpace,
   selectedNode,
+  pulse,
   situationSpace,
   onSaveSituation,
   onEditSituation,
   onDoneSituation,
+  onApplyAiMap,
   onAddPlans,
   onReschedule,
   onToast,
@@ -112,6 +117,8 @@ export default function Assistant({
   const [steps, setSteps] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [imageError, setImageError] = useState("");
+  const [mapPickerOpen, setMapPickerOpen] = useState(false);
+  const [mapDoc, setMapDoc] = useState<Doc | null>(null);
   const [situationDraft, setSituationDraft] = useState({
     deadline: "",
     weak: "",
@@ -124,6 +131,8 @@ export default function Assistant({
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const chatRef = useRef<HTMLDivElement | null>(null);
   const idRef = useRef(2);
+  const pulseIdRef = useRef(0);
+  const pulseAbortRef = useRef<AbortController | null>(null);
 
   const space = data.spaces.find((s) => s.id === activeSpace);
   const context = selectedNode ? `${VIEW_LABEL[view]} · ${selectedNode.title}` : `${VIEW_LABEL[view]} · ${space?.name ?? "全部"}`;
@@ -199,6 +208,74 @@ export default function Assistant({
     setAttachments([]);
     setImageError("");
   }, [open]);
+
+  useEffect(() => {
+    if (!pulse || pulseIdRef.current === pulse.id) return;
+    pulseIdRef.current = pulse.id;
+    pulseAbortRef.current?.abort();
+    const minutes = sum(pulse.sessions);
+    const study = sum(pulse.sessions.filter((item) => item.cat === "study"));
+    const planning = sum(pulse.sessions.filter((item) => item.cat === "plan"));
+    const leisure = sum(pulse.sessions.filter((item) => item.cat === "leisure"));
+    const dates = [...new Set(pulse.sessions.map((item) => item.date))].sort();
+    const tasks = [...new Set(pulse.sessions.map((item) => item.task.trim()).filter(Boolean))];
+    const unmapped = tasks.filter((task) => !data.prefs.taskRoutes?.[task]);
+    const fact = [
+      `已读取 ${pulse.batch.fileName}：新增 ${pulse.sessions.length} 条，共 ${fmtMin(minutes)}。`,
+      dates.length ? `日期 ${dates.join(" / ")}。` : "",
+      `学习 ${fmtMin(study)}，计划 ${fmtMin(planning)}，娱乐 ${fmtMin(leisure)}。`,
+      tasks.length ? `任务：${tasks.slice(0, 8).join("、")}${tasks.length > 8 ? "…" : ""}。` : "",
+      unmapped.length ? `其中 ${unmapped.length} 个任务还没有挂节点：${unmapped.slice(0, 5).join("、")}。` : "",
+      "这是导入回执，不是时长评价；你接下来想让我按这批事实调整内容，还是先看异常？",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    setMessages((old) => [
+      ...old,
+      { id: idRef.current++, role: "ai", text: fact, steps: ["读取刚导入的番茄事实"] },
+    ]);
+
+    if (!data.ai?.apiKey) return;
+    const controller = new AbortController();
+    pulseAbortRef.current = controller;
+    const prompt = [
+      "你刚收到用户导入的番茄Todo记录。",
+      "只根据下面的事实，用 2 到 4 句中文给一个简短反应：指出最值得注意的一个事实，以及一个下一步建议。",
+      "不要排分钟，不要重复所有数字，不要编造记录里没有的内容。",
+      `当前目标情况：${JSON.stringify(space ? { name: space.name, deadline: space.deadline, situation: space.situation } : null)}`,
+      `导入事实：${JSON.stringify({ dates, minutes, study, planning, leisure, tasks, unmapped })}`,
+    ].join("\n");
+    void fetch("/api/ai/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        config: { ...data.ai, temperature: 0.4 },
+        messages: [{ role: "user", content: prompt }],
+      }),
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const json = (await response.json()) as { text?: string; error?: string };
+        if (!response.ok) throw new Error(json.error ?? `HTTP ${response.status}`);
+        if (!json.text?.trim()) return;
+        setMessages((old) => [
+          ...old,
+          { id: idRef.current++, role: "ai", text: json.text!.trim(), steps: ["基于导入记录回应"] },
+        ]);
+      })
+      .catch((error) => {
+        if ((error as Error).name !== "AbortError") {
+          setMessages((old) => [
+            ...old,
+            {
+              id: idRef.current++,
+              role: "ai",
+              text: "这批记录我已经读到了；AI 接口这次没有回应，导入事实在上面。",
+            },
+          ]);
+        }
+      });
+  }, [data.ai, data.prefs.taskRoutes, pulse, space]);
 
   const stop = () => {
     for (const t of timers.current) window.clearTimeout(t);
@@ -305,6 +382,16 @@ export default function Assistant({
       .slice(0, 30)
       .map((s) => `- ${s.date} ${s.start} ${s.task} ${s.minutes} 分钟 ${s.cat}`)
       .join("\n");
+    const treeLines = data.nodes
+      .filter((node) => !space || node.spaceId === space.id)
+      .slice(0, 240)
+      .map((node) => `- ${node.id} | parent=${node.parentId ?? "ROOT"} | ${node.title} | ${node.state} | notes=${node.notes}`)
+      .join("\n");
+    const docLines = data.docs
+      .filter((doc) => !space || doc.spaceId === space.id)
+      .slice(0, 60)
+      .map((doc) => `- ${doc.title} | ${doc.kind} | node=${doc.nodeId ?? "未挂"} | ${doc.summary.slice(0, 50)}`)
+      .join("\n");
     return [
       "你是个人学习系统「足迹」的规划与复盘助手。",
       "硬规则：只安排内容，不安排分钟；不估计用时；完成标准必须可核对；部分完成必须说明完成了多少；延期必须问原因；复盘只引用事实；信息不足时先问一个最关键的问题；不要使用夸张鼓励和空话。",
@@ -325,6 +412,8 @@ export default function Assistant({
       `本周时间事实：学习 ${fmtMin(study)}，计划 ${fmtMin(planMin)}，娱乐 ${fmtMin(leisure)}，数据结构 ${fmtMin(dsMin)}。`,
       `当前计划：\n${planLines || "无"}`,
       `最近番茄记录：\n${sessionLines || "无"}`,
+      `知识树（只读上下文；改图必须走“从 PDF 建图”的提议与确认，不要假装已经写入）：\n${treeLines || "无"}`,
+      `资料库索引（只读；PDF 正文/目录通过“从 PDF 建图”读取）：\n${docLines || "无"}`,
     ].join("\n");
   };
 
@@ -542,6 +631,21 @@ export default function Assistant({
               onClick={() => onEditSituation(space)}
             >
               更新情况
+            </button>
+          ) : null}
+          {space ? (
+            <button
+              className="p-button ghost sm p-profile-update"
+              type="button"
+              onClick={() => {
+                if (!data.docs.some((doc) => doc.kind === "pdf" && doc.spaceId === space.id)) {
+                  onToast("这个目标的资料库里还没有 PDF，先去知识库导入。");
+                  return;
+                }
+                setMapPickerOpen(true);
+              }}
+            >
+              从 PDF 建图
             </button>
           ) : null}
           <span className={`p-ai-connection${data.ai?.apiKey ? " is-on" : ""}`}>
@@ -776,6 +880,48 @@ export default function Assistant({
           </div>
         </div>
       </aside>
+
+      {mapPickerOpen && space ? (
+        <Modal
+          title={`从 PDF 建图 · ${space.name}`}
+          subtitle="AI 先读 PDF 目录，生成节点树提议；你确认后才写入地图。"
+          onClose={() => setMapPickerOpen(false)}
+          footer={
+            <button className="p-button" type="button" onClick={() => setMapPickerOpen(false)}>
+              取消
+            </button>
+          }
+        >
+          <div className="p-pdf-picker">
+            {data.docs
+              .filter((doc) => doc.kind === "pdf" && doc.spaceId === space.id && doc.fileKey)
+              .map((doc) => (
+                <button
+                  key={doc.id}
+                  type="button"
+                  onClick={() => {
+                    setMapDoc(doc);
+                    setMapPickerOpen(false);
+                  }}
+                >
+                  <b>{doc.title}</b>
+                  <span>{doc.size ?? "PDF"} · {doc.nodeId ? "已挂节点" : "未挂节点"}</span>
+                </button>
+              ))}
+          </div>
+        </Modal>
+      ) : null}
+
+      {mapDoc && space ? (
+        <PdfMap
+          doc={mapDoc}
+          space={space}
+          data={data}
+          onApply={onApplyAiMap}
+          onClose={() => setMapDoc(null)}
+          onToast={onToast}
+        />
+      ) : null}
     </>
   );
 }

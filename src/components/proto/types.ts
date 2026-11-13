@@ -17,6 +17,15 @@ export type Space = {
 
 export type NodeState = "empty" | "marked" | "noted";
 
+export type NewMapNode = {
+  id: string;
+  spaceId: string;
+  parentId: string | null;
+  title: string;
+  summary?: string;
+  source?: string;
+};
+
 export type KNode = {
   id: string;
   spaceId: string;
@@ -95,6 +104,13 @@ export type ImportBatch = {
   duplicates: number;
   from: string;
   to: string;
+};
+
+export type AiPulse = {
+  id: number;
+  kind: "import";
+  sessions: Session[];
+  batch: ImportBatch;
 };
 
 export type TaskRoute = {

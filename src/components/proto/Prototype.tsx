@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type {
   AiConfig,
+  AiPulse,
   AppData,
   Doc,
   ImportBatch,
   KNode,
+  NewMapNode,
   PlanItem,
   Session,
   Situation,
@@ -54,6 +56,7 @@ export default function Prototype() {
   const [view, setView] = useState<View>("today");
   const [activeSpace, setActiveSpace] = useState<string>("all");
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [aiPulse, setAiPulse] = useState<AiPulse | null>(null);
   const [situationSpaceId, setSituationSpaceId] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<KNode | null>(null);
   const [libraryFocus, setLibraryFocus] = useState<string | null>(null);
@@ -219,6 +222,29 @@ export default function Prototype() {
     showToast(`已添加「${clean}」。它先是空心，学过之后再标记。`);
   };
 
+  const applyAiMap = (
+    spaceId: string,
+    incoming: NewMapNode[],
+    docId: string,
+    rootId: string | null,
+  ) => {
+    if (!incoming.length) return;
+    const nodes: KNode[] = incoming.map((node) => ({
+      ...node,
+      state: "empty",
+      notes: 0,
+      custom: true,
+    }));
+    setData((d) => ({
+      ...d,
+      nodes: [...d.nodes, ...nodes],
+      docs: d.docs.map((doc) =>
+        doc.id === docId ? { ...doc, spaceId, nodeId: doc.nodeId ?? rootId ?? undefined } : doc,
+      ),
+    }));
+    showToast(`AI 提议已写入：新增 ${nodes.length} 个节点，先都是空心。`);
+  };
+
   const updateMapNode = (node: KNode, title: string) => {
     const clean = title.trim();
     if (!clean || !node.custom) return;
@@ -373,16 +399,18 @@ export default function Prototype() {
     batch: ImportBatch,
     routes: Record<string, TaskRoute>,
   ) => {
-    setData((d) => {
-      const keys = new Set(d.sessions.map((s) => `${s.date}|${s.start}|${s.task.trim()}`));
-      const fresh = rows.filter((r) => !keys.has(`${r.date}|${r.start}|${r.task.trim()}`));
-      return {
-        ...d,
-        sessions: [...fresh, ...d.sessions],
-        imports: [batch, ...(d.imports ?? [])],
-        prefs: { ...d.prefs, taskRoutes: { ...(d.prefs.taskRoutes ?? {}), ...routes } },
-      };
-    });
+    const keys = new Set(data.sessions.map((s) => `${s.date}|${s.start}|${s.task.trim()}`));
+    const fresh = rows.filter((row) => !keys.has(`${row.date}|${row.start}|${row.task.trim()}`));
+    setData((d) => ({
+      ...d,
+      sessions: [...fresh, ...d.sessions],
+      imports: [batch, ...(d.imports ?? [])],
+      prefs: { ...d.prefs, taskRoutes: { ...(d.prefs.taskRoutes ?? {}), ...routes } },
+    }));
+    if (fresh.length) {
+      setAiPulse({ id: Date.now(), kind: "import", sessions: fresh, batch });
+      setAssistantOpen(true);
+    }
   };
 
   const addSpace = (s: Space) => {
@@ -435,6 +463,7 @@ export default function Prototype() {
     setActiveSpace("all");
     setView("today");
     setSituationSpaceId(null);
+    setAiPulse(null);
     setAssistantOpen(false);
     syncUrl("today", "all");
     try {
@@ -449,6 +478,7 @@ export default function Prototype() {
     setActiveSpace("all");
     setView("today");
     setSituationSpaceId(null);
+    setAiPulse(null);
     setAssistantOpen(false);
     syncUrl("today", "all");
     showToast("已载入示例数据；可在设置里再次清空。");
@@ -616,6 +646,7 @@ export default function Prototype() {
             focusNodeId={libraryFocus}
             onClearFocus={() => setLibraryFocus(null)}
             onAddDocs={addDocs}
+            onApplyAiMap={applyAiMap}
             onToast={showToast}
           />
         ) : null}
@@ -667,10 +698,12 @@ export default function Prototype() {
         view={view}
         activeSpace={activeSpace}
         selectedNode={selectedNode}
+        pulse={aiPulse}
         situationSpace={situationSpace}
         onSaveSituation={saveSituation}
         onEditSituation={editSituation}
         onDoneSituation={() => setSituationSpaceId(null)}
+        onApplyAiMap={applyAiMap}
         onAddPlans={addPlans}
         onReschedule={reschedule}
         onToast={showToast}

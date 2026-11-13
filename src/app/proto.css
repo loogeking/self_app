@@ -1155,3 +1155,79 @@ body {
   .p-situation-grid { grid-template-columns: minmax(0, 1fr); }
   .p-situation-wide { grid-column: auto; }
 }
+/* AI 从 PDF 建图 */
+.p-pdfmap { min-height: 260px; }
+.p-pdfmap-state {
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--p-muted);
+}
+.p-pdfmap-state b { color: var(--p-ink); font-size: 15px; }
+.p-pdfmap-state p { max-width: 460px; font-size: 11.5px; line-height: 1.7; }
+.p-pdfmap-state.is-error b { color: #9b3f3b; }
+.p-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgba(47, 95, 168, 0.18);
+  border-top-color: #2f5fa8;
+  border-radius: 50%;
+  animation: p-spin 0.8s linear infinite;
+}
+@keyframes p-spin { to { transform: rotate(360deg); } }
+.p-pdfmap-summary {
+  padding: 12px 14px;
+  border: 1px solid rgba(47, 95, 168, 0.16);
+  border-radius: 13px;
+  background: rgba(47, 95, 168, 0.055);
+}
+.p-pdfmap-summary b { display: block; font-size: 17px; letter-spacing: -0.02em; }
+.p-pdfmap-summary p { margin: 4px 0 7px !important; color: var(--p-muted); font-size: 11.5px; line-height: 1.6; }
+.p-pdfmap-summary span { color: var(--p-faint); font-size: 10.5px; }
+.p-pdfmap-summary span b { display: inline; font-size: inherit; color: var(--p-ink-2); }
+.p-pdfmap-tree {
+  max-height: 46vh;
+  overflow: auto;
+  margin: 12px 0;
+  padding: 6px;
+  border: 1px solid rgba(48, 66, 96, 0.09);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.38);
+}
+.p-pdfmap-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 27px;
+  padding-right: 8px;
+  border-radius: 6px;
+  color: var(--p-muted);
+  font-size: 11.5px;
+}
+.p-pdfmap-node.is-new { color: var(--p-ink-2); }
+.p-pdfmap-node:hover { background: rgba(47, 95, 168, 0.06); }
+.p-pdfmap-dot { width: 4px; height: 4px; flex: 0 0 auto; border-radius: 50%; background: #aeb8c7; }
+.p-pdfmap-node.is-new .p-pdfmap-dot { background: #2f5fa8; }
+.p-pdfmap-node em { color: var(--p-faint); font-size: 9px; font-style: normal; }
+.p-pdfmap-node small { margin-left: auto; color: var(--p-faint); font-size: 9px; }
+.p-pdfmap-node.is-new small { color: #2f5fa8; }
+.p-pdf-picker { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow: auto; }
+.p-pdf-picker button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid rgba(48, 66, 96, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.5);
+  text-align: left;
+  cursor: pointer;
+}
+.p-pdf-picker button:hover { border-color: rgba(47, 95, 168, 0.35); background: rgba(255, 255, 255, 0.75); }
+.p-pdf-picker b { color: var(--p-ink-2); font-size: 12.5px; }
+.p-pdf-picker span { color: var(--p-faint); font-size: 10px; }

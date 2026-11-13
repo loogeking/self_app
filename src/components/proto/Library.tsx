@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AppData, Doc, DocKind, KNode, Space } from "./types";
+import type { AppData, Doc, DocKind, KNode, NewMapNode, Space } from "./types";
 import { CAT_COLOR, CAT_LABEL, Markdownish, Modal, fmtMin, sum } from "./ui";
 import { getLocalFile, putLocalFile } from "./fileStore";
 import { TODAY } from "./data";
+import PdfMap from "./PdfMap";
 
 type Props = {
   data: AppData;
   activeSpace: string;
   onAddDocs: (docs: Doc[]) => void;
+  onApplyAiMap: (spaceId: string, nodes: NewMapNode[], docId: string, rootId: string | null) => void;
   onToast: (text: string) => void;
   focusNodeId?: string | null;
   onClearFocus?: () => void;
@@ -58,6 +60,7 @@ export default function Library({
   data,
   activeSpace,
   onAddDocs,
+  onApplyAiMap,
   onToast,
   focusNodeId,
   onClearFocus,
@@ -65,6 +68,7 @@ export default function Library({
   const [kind, setKind] = useState<"all" | DocKind>("all");
   const [query, setQuery] = useState("");
   const [preview, setPreview] = useState<Doc | null>(null);
+  const [mapDoc, setMapDoc] = useState<Doc | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -221,6 +225,7 @@ export default function Library({
   }, [data.docs, activeSpace]);
 
   const previewSpace = preview ? data.spaces.find((s) => s.id === preview.spaceId) : null;
+  const mapSpace = mapDoc ? data.spaces.find((space) => space.id === mapDoc.spaceId) : null;
   const previewSessions = preview?.kind === "review" && preview.updatedAt
     ? data.sessions.filter((s) => s.date === preview.updatedAt)
     : [];
@@ -379,6 +384,22 @@ export default function Library({
           wide
           footer={
             <>
+              {preview.kind === "pdf" && preview.fileKey ? (
+                <button
+                  className="p-button"
+                  type="button"
+                  onClick={() => {
+                    if (!data.spaces.some((space) => space.id === preview.spaceId)) {
+                      onToast("这份 PDF 所属的大类已不存在，先重新导入。");
+                      return;
+                    }
+                    setMapDoc(preview);
+                    setPreview(null);
+                  }}
+                >
+                  AI 整理成地图
+                </button>
+              ) : null}
               <button className="p-button" type="button" onClick={() => void downloadPreview()}>
                 下载
               </button>
@@ -525,6 +546,17 @@ export default function Library({
             </div>
           </div>
         </Modal>
+      ) : null}
+
+      {mapDoc && mapSpace ? (
+        <PdfMap
+          doc={mapDoc}
+          space={mapSpace}
+          data={data}
+          onApply={onApplyAiMap}
+          onClose={() => setMapDoc(null)}
+          onToast={onToast}
+        />
       ) : null}
     </div>
   );
