@@ -52,23 +52,28 @@ docker run --rm -p 3000:3000 footprint
 
 ## 数据与边界
 
-- 初始数据在 `src/components/proto/data.ts`，界面会明确标注“原型示例”。
+- 首次打开是空工作区：没有计划、番茄记录、复盘、资料和已学状态，只保留 408 教材目录骨架。
+- 设置里可以手动“载入示例数据”，也可以随时“清空我的数据”。
+- 示例与种子数据在 `src/components/proto/data.ts`。
 - 番茄Todo 导出的 `.xls` 实际是 SpreadsheetML XML，由 `src/components/proto/pomodoro.ts` 在浏览器中解析。
 - 导入按「日期 + 开始时间 + 待办名称」去重；0 分钟记录保留但不计入统计。
-- 数据只存在当前浏览器的 `localStorage`，键名 `proto-v4`，设置页可以重置。
-- 助手目前是脚本化交互，不调用真实模型 API。
+- 数据只存在当前浏览器的 `localStorage`，键名 `footprint-v1`。
+- 助手在未配置 API 时使用脚本回答；配置 Key 后通过 `/api/ai/chat` 请求 OpenAI 兼容接口。
 
 ## 结构
+
+完整的模块职责、数据流、3D 地图与 AI 配置说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ```text
 src/app/
   layout.tsx          根布局、PWA、元信息
   page.tsx            唯一入口
   proto.css           全部界面样式
+  api/ai/chat/route.ts AI 请求代理
 src/components/proto/
   Prototype.tsx       壳、状态、localStorage、视图切换
   Today.tsx           今日内容、事实、番茄导入
-  MapView.tsx         深色知识图谱
+  MapView.tsx         可旋转 3D 知识图谱、节点增删改查
   Plan.tsx            周内容板、进度、延期
   Library.tsx         书 / 笔记 / 复盘
   Review.tsx          每日复盘与每周事实统计

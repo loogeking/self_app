@@ -507,6 +507,39 @@ export const SEED: AppData = {
     },
   },
   imports: [],
+  ai: {
+    provider: "deepseek",
+    baseUrl: "https://api.deepseek.com/v1",
+    model: "deepseek-chat",
+    apiKey: "",
+    temperature: 0.6,
+  },
+};
+
+// 首次打开是空工作区：保留 408 目录骨架，但不预置计划、记录、复盘、资料或已学状态。
+export const EMPTY: AppData = {
+  spaces: SPACES,
+  nodes: nodes.map((node) => ({
+    ...node,
+    state: "empty",
+    notes: 0,
+    lastAt: undefined,
+    source: undefined,
+  })),
+  docs: [],
+  plans: [],
+  sessions: [],
+  reviews: [],
+  profile: {
+    goal: "",
+    examDate: EXAM_DATE,
+    weak: "",
+    busy: "",
+    availableDays: "",
+  },
+  prefs: SEED.prefs,
+  imports: [],
+  ai: { ...SEED.ai! },
 };
 
 export const SPACE_BY_ID = new Map(SPACES.map((s) => [s.id, s]));

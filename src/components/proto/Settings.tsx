@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { AppData, Space } from "./types";
+import type { AiConfig, AiProvider, AppData, Space } from "./types";
 import { Modal } from "./ui";
 
 type Props = {
@@ -15,13 +15,86 @@ type Props = {
 
 const COLORS = ["#2f5fa8", "#b96b12", "#6b52b8", "#3f6f9b", "#a94a4a", "#6f7550"];
 
-export default function Settings({ data, onAddSpace, onEditSpace, onDeleteSpace, onReset, onToast }: Props) {
+type PropsWithAi = Props & {
+  onUpdateAi: (ai: AiConfig) => void;
+  onLoadDemo: () => void;
+};
+
+const AI_PRESETS: Record<AiProvider, Pick<AiConfig, "baseUrl" | "model">> = {
+  deepseek: { baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat" },
+  openai: { baseUrl: "https://api.openai.com/v1", model: "gpt-4.1-mini" },
+  custom: { baseUrl: "", model: "" },
+};
+
+export default function Settings({
+  data,
+  onAddSpace,
+  onEditSpace,
+  onDeleteSpace,
+  onUpdateAi,
+  onLoadDemo,
+  onReset,
+  onToast,
+}: PropsWithAi) {
   const [editing, setEditing] = useState<Space | null>(null);
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<Space | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
 
   const draftInit = { name: "", color: COLORS[0], description: "", deadline: "" };
   const [draft, setDraft] = useState(draftInit);
+  const [aiDraft, setAiDraft] = useState<AiConfig>(
+    data.ai ?? {
+      provider: "deepseek",
+      baseUrl: AI_PRESETS.deepseek.baseUrl,
+      model: AI_PRESETS.deepseek.model,
+      apiKey: "",
+      temperature: 0.6,
+    },
+  );
+  const [showKey, setShowKey] = useState(false);
+  const [testingAi, setTestingAi] = useState(false);
+  const [aiTest, setAiTest] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const saveAi = () => {
+    if (!aiDraft.baseUrl.trim() || !aiDraft.model.trim()) {
+      onToast("先填 Base URL 和模型名。");
+      return;
+    }
+    onUpdateAi({
+      ...aiDraft,
+      baseUrl: aiDraft.baseUrl.trim().replace(/\/+$/, ""),
+      model: aiDraft.model.trim(),
+      apiKey: aiDraft.apiKey.trim(),
+    });
+    onToast("AI 接口配置已保存到本机。");
+  };
+
+  const testAi = async () => {
+    if (!aiDraft.baseUrl.trim() || !aiDraft.model.trim() || !aiDraft.apiKey.trim()) {
+      setAiTest({ ok: false, text: "先填 Base URL、模型和 API Key。" });
+      return;
+    }
+    setTestingAi(true);
+    setAiTest(null);
+    try {
+      const response = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          config: aiDraft,
+          messages: [{ role: "user", content: "只回复：连接成功" }],
+        }),
+      });
+      const json = (await response.json()) as { text?: string; error?: string };
+      if (!response.ok) throw new Error(json.error ?? `HTTP ${response.status}`);
+      setAiTest({ ok: true, text: `连接成功：${json.text ?? "接口可用"}` });
+    } catch (error) {
+      setAiTest({ ok: false, text: error instanceof Error ? error.message : "测试失败" });
+    } finally {
+      setTestingAi(false);
+    }
+  };
 
   const counts = useMemo(() => {
     const map = new Map<string, { nodes: number; docs: number }>();
@@ -167,13 +240,120 @@ export default function Settings({ data, onAddSpace, onEditSpace, onDeleteSpace,
         <div className="p-settings-side">
           <section className="p-card">
             <div className="p-card-head">
+              <h2>AI 接口</h2>
+              <em>{data.ai?.apiKey ? "已配置" : "未配置"}</em>
+              <span className={`p-ai-status${data.ai?.apiKey ? " is-on" : ""}`}>
+                {data.ai?.apiKey ? `${data.ai.provider} · ${data.ai.model}` : "助手当前为脚本模式"}
+              </span>
+            </div>
+            <div className="p-ai-grid">
+              <label className="p-field">
+                服务商
+                <select
+                  className="p-select"
+                  value={aiDraft.provider}
+                  onChange={(event) => {
+                    const provider = event.target.value as AiProvider;
+                    const preset = AI_PRESETS[provider];
+                    setAiDraft((current) => ({
+                      ...current,
+                      provider,
+                      baseUrl: preset.baseUrl || current.baseUrl,
+                      model: preset.model || current.model,
+                    }));
+                  }}
+                >
+                  <option value="deepseek">DeepSeek</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="custom">自定义 OpenAI 兼容接口</option>
+                </select>
+              </label>
+              <label className="p-field">
+                模型
+                <input
+                  className="p-input"
+                  value={aiDraft.model}
+                  onChange={(event) => setAiDraft({ ...aiDraft, model: event.target.value })}
+                  placeholder="deepseek-chat"
+                />
+              </label>
+              <label className="p-field p-ai-wide">
+                Base URL
+                <input
+                  className="p-input"
+                  value={aiDraft.baseUrl}
+                  onChange={(event) => setAiDraft({ ...aiDraft, baseUrl: event.target.value })}
+                  placeholder="https://api.deepseek.com/v1"
+                />
+              </label>
+              <label className="p-field p-ai-wide">
+                API Key
+                <span className="p-secret-input">
+                  <input
+                    className="p-input"
+                    type={showKey ? "text" : "password"}
+                    value={aiDraft.apiKey}
+                    onChange={(event) => setAiDraft({ ...aiDraft, apiKey: event.target.value })}
+                    placeholder="sk-…"
+                    autoComplete="off"
+                  />
+                  <button type="button" onClick={() => setShowKey((value) => !value)}>
+                    {showKey ? "隐藏" : "显示"}
+                  </button>
+                </span>
+              </label>
+              <label className="p-field">
+                温度
+                <input
+                  className="p-input"
+                  inputMode="decimal"
+                  value={aiDraft.temperature}
+                  onChange={(event) =>
+                    setAiDraft({ ...aiDraft, temperature: Number(event.target.value) || 0 })
+                  }
+                  placeholder="0.6"
+                />
+              </label>
+            </div>
+            <div className="p-ai-actions">
+              <button className="p-button primary sm" type="button" onClick={saveAi}>
+                保存配置
+              </button>
+              <button className="p-button sm" type="button" onClick={() => void testAi()} disabled={testingAi}>
+                {testingAi ? "测试中…" : "测试连接"}
+              </button>
+              <button
+                className="p-button ghost sm"
+                type="button"
+                onClick={() => {
+                  const cleared = { ...aiDraft, apiKey: "" };
+                  setAiDraft(cleared);
+                  onUpdateAi(cleared);
+                  setAiTest(null);
+                  onToast("已清除本机保存的 API Key。");
+                }}
+              >
+                清除 Key
+              </button>
+            </div>
+            {aiTest ? (
+              <p className={`p-ai-test${aiTest.ok ? " is-ok" : " is-error"}`}>{aiTest.text}</p>
+            ) : null}
+            <p className="p-note">
+              Key 只保存在当前浏览器的 localStorage；请求经本站的 `/api/ai/chat` 转发，不写入仓库或服务器日志。
+              公共设备上不要保存 Key。
+            </p>
+          </section>
+
+          <section className="p-card">
+            <div className="p-card-head">
               <h2>情况档案</h2>
               <em>助手读这个</em>
             </div>
             <div className="p-profile">
               <div className="p-profile-row">
                 <span>目标</span>
-                <b>{data.profile.goal}</b>
+                <b>{data.profile.goal || "未设置"}</b>
               </div>
               <div className="p-profile-row">
                 <span>考试</span>
@@ -181,25 +361,20 @@ export default function Settings({ data, onAddSpace, onEditSpace, onDeleteSpace,
               </div>
               <div className="p-profile-row">
                 <span>最虚</span>
-                <b>{data.profile.weak}</b>
+                <b>{data.profile.weak || "未设置"}</b>
               </div>
               <div className="p-profile-row">
                 <span>最忙</span>
-                <b>{data.profile.busy}</b>
+                <b>{data.profile.busy || "未设置"}</b>
               </div>
               <div className="p-profile-row">
                 <span>可学习日</span>
-                <b>{data.profile.availableDays}</b>
+                <b>{data.profile.availableDays || "未设置"}</b>
               </div>
             </div>
-            <button
-              className="p-button sm"
-              style={{ marginTop: 12 }}
-              type="button"
-              onClick={() => onToast("原型：真实环境里通过对话更新，AI 提议、你确认")}
-            >
-              通过对话更新
-            </button>
+            <p className="p-note" style={{ marginTop: 10 }}>
+              情况档案目前由本地种子和助手上下文使用；后续接后端后可在对话里确认更新。
+            </p>
           </section>
 
           <section className="p-card">
@@ -235,22 +410,26 @@ export default function Settings({ data, onAddSpace, onEditSpace, onDeleteSpace,
           <section className="p-card">
             <div className="p-card-head">
               <h2>数据</h2>
-              <em>原型数据存在本机</em>
+              <em>只存在本机浏览器</em>
             </div>
             <p className="p-tiny p-faint" style={{ lineHeight: 1.7 }}>
-              当前是前端原型，改动保存在 localStorage；重置会回到初始演示数据。
+              默认是空工作区：没有计划、番茄记录、复盘、资料和已学状态，只保留 408 目录骨架。
+              所有改动保存在 localStorage。
             </p>
-            <button
-              className="p-button sm"
-              style={{ marginTop: 10 }}
-              type="button"
-              onClick={() => {
-                onReset();
-                onToast("已重置演示数据");
-              }}
-            >
-              重置演示数据
-            </button>
+            <div className="p-ai-actions">
+              <button className="p-button sm" type="button" onClick={() => setResetOpen(true)}>
+                清空我的数据
+              </button>
+              <button
+                className="p-button ghost sm"
+                type="button"
+                onClick={() => {
+                  onLoadDemo();
+                }}
+              >
+                载入示例数据
+              </button>
+            </div>
           </section>
         </div>
       </div>
@@ -355,6 +534,36 @@ export default function Settings({ data, onAddSpace, onEditSpace, onDeleteSpace,
           <p className="p-sub">
             会删除该大类下 {counts.get(deleting.id)?.nodes ?? 0} 个节点和{" "}
             {counts.get(deleting.id)?.docs ?? 0} 份资料。真实后端会先提供迁移/归档。
+          </p>
+        </Modal>
+      ) : null}
+
+      {resetOpen ? (
+        <Modal
+          title="清空所有本机数据？"
+          subtitle="会删除计划、番茄记录、复盘、资料、自建节点、AI Key 和大类改动。"
+          onClose={() => setResetOpen(false)}
+          footer={
+            <>
+              <button className="p-button" type="button" onClick={() => setResetOpen(false)}>
+                取消
+              </button>
+              <button
+                className="p-button primary"
+                type="button"
+                onClick={() => {
+                  onReset();
+                  setResetOpen(false);
+                  onToast("已清空，回到空工作区。");
+                }}
+              >
+                清空
+              </button>
+            </>
+          }
+        >
+          <p className="p-sub">
+            408 教材目录骨架会保留，所有学习状态恢复为空心，其他内容为空。
           </p>
         </Modal>
       ) : null}

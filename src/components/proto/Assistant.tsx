@@ -62,6 +62,7 @@ export default function Assistant({
   const [thinking, setThinking] = useState(false);
   const [steps, setSteps] = useState<string[]>([]);
   const timers = useRef<number[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
   const chatRef = useRef<HTMLDivElement | null>(null);
   const idRef = useRef(2);
 
@@ -92,6 +93,7 @@ export default function Assistant({
     return () => {
       for (const t of timers.current) window.clearTimeout(t);
       timers.current = [];
+      abortRef.current?.abort();
     };
   }, []);
 
@@ -106,6 +108,8 @@ export default function Assistant({
   const stop = () => {
     for (const t of timers.current) window.clearTimeout(t);
     timers.current = [];
+    abortRef.current?.abort();
+    abortRef.current = null;
     setThinking(false);
     setSteps([]);
     setMessages((m) => [
@@ -171,13 +175,89 @@ export default function Assistant({
     };
   };
 
-  const send = (raw?: string) => {
+  const aiSystem = () => {
+    const planLines = data.plans
+      .slice(0, 8)
+      .map(
+        (p) =>
+          `- ${p.title}｜${p.status}｜截止 ${p.deadline ?? "未设"}｜完成标准：${p.scope}｜依据：${p.basis}` +
+          (p.doneAmount !== undefined || p.goalAmount
+            ? `｜进度 ${p.doneAmount ?? 0}/${p.goalAmount ?? "?"}${p.unit ?? ""}`
+            : "") +
+          (p.deferReason ? `｜延期原因：${p.deferReason}` : ""),
+      )
+      .join("\n");
+    const sessionLines = week
+      .slice(0, 30)
+      .map((s) => `- ${s.date} ${s.start} ${s.task} ${s.minutes} 分钟 ${s.cat}`)
+      .join("\n");
+    return [
+      "你是个人学习系统「足迹」的规划与复盘助手。",
+      "硬规则：只安排内容，不安排分钟；不估计用时；完成标准必须可核对；部分完成必须说明完成了多少；延期必须问原因；复盘只引用事实；信息不足时先问一个最关键的问题；不要使用夸张鼓励和空话。",
+      "回答用简体中文，简洁，直接给建议或问题。",
+      `当前页面：${VIEW_LABEL[view]}；当前大类：${space?.name ?? "全部"}；当前节点：${selectedNode?.title ?? "未选择"}。`,
+      `情况档案：${JSON.stringify(data.profile)}。`,
+      `本周时间事实：学习 ${fmtMin(study)}，计划 ${fmtMin(planMin)}，娱乐 ${fmtMin(leisure)}，数据结构 ${fmtMin(dsMin)}。`,
+      `当前计划：\n${planLines || "无"}`,
+      `最近番茄记录：\n${sessionLines || "无"}`,
+    ].join("\n");
+  };
+
+  const send = async (raw?: string) => {
     const text = (raw ?? input).trim();
     if (!text || thinking) return;
     setInput("");
     setMessages((m) => [...m, { id: idRef.current++, role: "user", text }]);
     setThinking(true);
     setSteps([]);
+
+    if (data.ai?.apiKey) {
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const stepList = ["读取当前页面和最近事实", `调用 ${data.ai.model}`, "整理回答"];
+      setSteps(stepList.slice(0, 2));
+      try {
+        const history = messages
+          .filter((m) => m.role === "user" || m.role === "ai")
+          .slice(-6)
+          .map((m) => ({ role: m.role, content: m.text }));
+        const response = await fetch("/api/ai/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            config: data.ai,
+            messages: [
+              { role: "system", content: aiSystem() },
+              ...history,
+              { role: "user", content: text },
+            ],
+          }),
+          signal: controller.signal,
+        });
+        const json = (await response.json()) as { text?: string; error?: string };
+        if (!response.ok) throw new Error(json.error ?? `HTTP ${response.status}`);
+        setMessages((m) => [
+          ...m,
+          { id: idRef.current++, role: "ai", text: json.text ?? "接口没有返回内容。", steps: stepList },
+        ]);
+      } catch (error) {
+        if ((error as Error).name === "AbortError") return;
+        setMessages((m) => [
+          ...m,
+          {
+            id: idRef.current++,
+            role: "ai",
+            text: `接口调用失败：${error instanceof Error ? error.message : "未知错误"}\n\n到「设置 → AI 接口」检查 Base URL、模型和 Key。`,
+            steps: ["调用接口失败"],
+          },
+        ]);
+      } finally {
+        abortRef.current = null;
+        setThinking(false);
+        setSteps([]);
+      }
+      return;
+    }
 
     const stepList = ["读取本周内容与番茄记录", "检查知识树与依据", "生成动作并校验"];
     stepList.forEach((s, i) => {
@@ -274,6 +354,11 @@ export default function Assistant({
         <div className="p-profile-strip">
           它知道：{data.profile.goal} · 最虚 {data.profile.weak} · {data.profile.busy} · 可学习日{" "}
           {data.profile.availableDays}。不知道的会先问。
+          <span className={`p-ai-connection${data.ai?.apiKey ? " is-on" : ""}`}>
+            {data.ai?.apiKey
+              ? `接口：${data.ai.provider} · ${data.ai.model}`
+              : "未配置 AI 接口，当前使用脚本回答；可在设置里填写 Key。"}
+          </span>
         </div>
 
         <div className="p-chat" ref={chatRef}>

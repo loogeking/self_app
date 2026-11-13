@@ -11,10 +11,10 @@ export const CAT_LABEL: Record<SessionCat, string> = {
 };
 
 export const CAT_COLOR: Record<SessionCat, string> = {
-  study: "var(--p-accent)",
-  plan: "#c2873d",
-  leisure: "#cf7a63",
-  other: "#8992a1",
+  study: "#2f5fa8",
+  plan: "#a97b2f",
+  leisure: "#c56f5c",
+  other: "#7d8798",
 };
 
 export const STATUS_LABEL: Record<PlanStatus, string> = {

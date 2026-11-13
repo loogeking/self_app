@@ -18,6 +18,7 @@ export type KNode = {
   lastAt?: string;
   source?: string;
   summary?: string;
+  custom?: boolean;
 };
 
 export type DocKind = "pdf" | "md" | "image" | "review";
@@ -97,6 +98,16 @@ export type DailyReview = {
   savedAt?: string;
 };
 
+export type AiProvider = "deepseek" | "openai" | "custom";
+
+export type AiConfig = {
+  provider: AiProvider;
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+  temperature: number;
+};
+
 export type Profile = {
   goal: string;
   examDate: string;
@@ -123,6 +134,7 @@ export type AppData = {
   profile: Profile;
   prefs: Prefs;
   imports?: ImportBatch[];
+  ai?: AiConfig;
 };
 
 export type View = "today" | "map" | "plan" | "library" | "review" | "settings";

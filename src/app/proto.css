@@ -872,3 +872,91 @@ body {
   min-height: 100dvh;
   overflow-x: hidden;
 }
+/* AI 接口配置 */
+.p-ai-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 10px;
+}
+.p-ai-wide { grid-column: 1 / -1; }
+.p-ai-status {
+  margin-left: auto;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(48, 66, 96, 0.06);
+  color: var(--p-faint);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.p-ai-status.is-on { background: rgba(47, 95, 168, 0.09); color: var(--p-accent); }
+.p-secret-input { position: relative; display: block; }
+.p-secret-input .p-input { padding-right: 52px; }
+.p-secret-input button {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--p-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.p-secret-input button:hover { color: var(--p-accent); }
+.p-ai-actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: 11px; }
+.p-ai-test {
+  margin-top: 9px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.p-ai-test.is-ok { background: rgba(47, 95, 168, 0.08); color: #2b568f; }
+.p-ai-test.is-error { background: rgba(169, 74, 74, 0.09); color: #8e3d3d; }
+.p-ai-connection {
+  display: block;
+  margin-top: 5px;
+  color: var(--p-faint);
+  font-size: 10.5px;
+}
+.p-ai-connection.is-on { color: var(--p-accent); }
+/* 3D 地图补充 */
+.kg-toolbar-panel-button.kg-rotate-button.is-on {
+  border-color: color-mix(in srgb, var(--kg-accent) 38%, transparent);
+  color: color-mix(in srgb, var(--kg-accent) 34%, white);
+}
+.kg-custom-mark {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--kg-accent) 16%, transparent);
+  color: color-mix(in srgb, var(--kg-accent) 38%, white);
+  font-size: 9px;
+  font-style: normal;
+}
+.kg-danger-action { color: #dca1a1; }
+.kg-danger-action:hover { border-color: #b66d6d !important; color: #f0c0c0 !important; }
+.kg-note-preview { display: flex; flex-direction: column; gap: 14px; }
+.kg-note-summary {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 2px solid var(--p-accent);
+  background: rgba(47, 95, 168, 0.06);
+  color: var(--p-ink-2);
+  font-size: 12.5px;
+  line-height: 1.75;
+}
+.kg-note-preview .p-preview-body { font-size: 13.5px; line-height: 1.85; color: var(--p-ink-2); }
+.kg-note-file {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px;
+  border: 1px dashed rgba(48, 66, 96, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.36);
+}
+.kg-note-file strong { font-size: 13px; }
+.kg-note-file span { color: var(--p-muted); font-size: 11px; }
+.kg-note-file p { margin-top: 4px; color: var(--p-faint); font-size: 11px; line-height: 1.65; }

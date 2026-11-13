@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type {
+  AiConfig,
   AppData,
   Doc,
   ImportBatch,
@@ -12,7 +13,7 @@ import type {
   TaskRoute,
   View,
 } from "./types";
-import { SEED, TODAY } from "./data";
+import { EMPTY, SEED, TODAY } from "./data";
 import { MAP_408_NODES } from "./map408";
 import Today from "./Today";
 import MapView from "./MapView";
@@ -23,7 +24,7 @@ import Settings from "./Settings";
 import Assistant from "./Assistant";
 import { Modal, weekdayCN } from "./ui";
 
-const KEY = "proto-v4";
+const KEY = "footprint-v1";
 
 const NAV: { key: View; label: string }[] = [
   { key: "today", label: "今日" },
@@ -41,11 +42,16 @@ function clone(data: AppData): AppData {
 function withOutline(data: AppData): AppData {
   const ids = new Set(data.nodes.map((node) => node.id));
   const missing = MAP_408_NODES.filter((node) => !ids.has(node.id));
-  return missing.length ? { ...data, nodes: [...data.nodes, ...missing] } : data;
+  return {
+    ...data,
+    nodes: missing.length ? [...data.nodes, ...missing] : data.nodes,
+    ai: data.ai ?? { ...SEED.ai! },
+    imports: data.imports ?? [],
+  };
 }
 
 export default function Prototype() {
-  const [data, setData] = useState<AppData>(() => clone(SEED));
+  const [data, setData] = useState<AppData>(() => clone(EMPTY));
   const [view, setView] = useState<View>("today");
   const [activeSpace, setActiveSpace] = useState<string>("all");
   const [assistantOpen, setAssistantOpen] = useState(false);
@@ -189,10 +195,48 @@ export default function Prototype() {
       title: clean,
       state: "empty",
       notes: 0,
+      custom: true,
     };
     setData((d) => ({ ...d, nodes: [...d.nodes, node] }));
     showToast(`已添加「${clean}」。它先是空心，学过之后再标记。`);
   };
+
+  const updateMapNode = (node: KNode, title: string) => {
+    const clean = title.trim();
+    if (!clean || !node.custom) return;
+    setData((d) => ({
+      ...d,
+      nodes: d.nodes.map((n) => (n.id === node.id ? { ...n, title: clean } : n)),
+    }));
+    showToast(`已改名为「${clean}」。`);
+  };
+
+  const deleteMapNode = (node: KNode) => {
+    if (!node.custom) return;
+    setData((d) => {
+      const remove = new Set<string>([node.id]);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const item of d.nodes) {
+          if (item.parentId && remove.has(item.parentId) && !remove.has(item.id)) {
+            remove.add(item.id);
+            changed = true;
+          }
+        }
+      }
+      return {
+        ...d,
+        nodes: d.nodes.filter((n) => !remove.has(n.id)),
+        docs: d.docs.map((doc) =>
+          doc.nodeId && remove.has(doc.nodeId) ? { ...doc, nodeId: node.parentId ?? undefined } : doc,
+        ),
+      };
+    });
+    showToast(`已删除「${node.title}」；相关笔记已移到上一级。`);
+  };
+
+  const updateAi = (ai: AiConfig) => setData((d) => ({ ...d, ai }));
 
   const addPlan = (p: PlanItem) => {
     setData((d) => ({ ...d, plans: [p, ...d.plans] }));
@@ -334,14 +378,23 @@ export default function Prototype() {
   };
 
   const reset = () => {
-    setData(clone(SEED));
+    setData(clone(EMPTY));
     setActiveSpace("all");
     setView("today");
+    syncUrl("today", "all");
     try {
       localStorage.removeItem(KEY);
     } catch {
       /* ignore */
     }
+  };
+
+  const loadDemo = () => {
+    setData(clone(SEED));
+    setActiveSpace("all");
+    setView("today");
+    syncUrl("today", "all");
+    showToast("已载入示例数据；可在设置里再次清空。");
   };
 
   const openReview = (date?: string) => {
@@ -381,9 +434,6 @@ export default function Prototype() {
         <div className="p-brand">
           <span className="p-mark" />
           足迹
-          <span className="p-tag lime" style={{ marginLeft: 2 }}>
-            原型
-          </span>
         </div>
         <nav className="p-nav">
           {NAV.map((n) => (
@@ -477,6 +527,8 @@ export default function Prototype() {
                 syncUrl("library", node.spaceId);
               }}
               onAddNode={addMapNode}
+              onUpdateNode={updateMapNode}
+              onDeleteNode={deleteMapNode}
               onSelectNode={setSelectedNode}
               onToast={showToast}
             />
@@ -524,7 +576,9 @@ export default function Prototype() {
             onAddSpace={addSpace}
             onEditSpace={editSpace}
             onDeleteSpace={deleteSpace}
+            onUpdateAi={updateAi}
             onReset={reset}
+            onLoadDemo={loadDemo}
             onToast={showToast}
           />
         ) : null}

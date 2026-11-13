@@ -185,11 +185,11 @@ export default function Plan({
 
       <div className="p-weekbar">
         <div className="p-week-nav">
-          <button type="button" onClick={() => onToast("原型只演示本周")}>
+          <button type="button" onClick={() => onToast("当前只显示本周")}>
             ‹
           </button>
           <span>2026-11-10 至 2026-11-16</span>
-          <button type="button" onClick={() => onToast("原型只演示本周")}>
+          <button type="button" onClick={() => onToast("当前只显示本周")}>
             ›
           </button>
         </div>

@@ -248,9 +248,9 @@ export default function Review({ data, activeSpace, initialDate, onSaveReview, o
                 )}
                 <p className="p-source-line">
                   {importedSessions.length
-                    ? `其中 ${importedSessions.length} 条来自导入${sampleSessions.length ? `，${sampleSessions.length} 条为原型示例` : ""}。`
+                    ? `其中 ${importedSessions.length} 条来自导入${sampleSessions.length ? `，${sampleSessions.length} 条为示例记录` : ""}。`
                     : sessions.length
-                      ? "当前全部是原型示例记录，导入自己的文件后会以导入记录为准。"
+                      ? "当前全部是示例记录，导入自己的文件后会以导入记录为准。"
                       : "暂无数据来源。"}
                 </p>
               </div>
@@ -288,7 +288,7 @@ export default function Review({ data, activeSpace, initialDate, onSaveReview, o
               <button
                 className="p-button sm"
                 type="button"
-                onClick={() => onToast("原型：真实环境会重新读取本周数据并重算")}
+                onClick={() => onToast("当前版本会按本周本地数据重新计算")}
               >
                 重新计算
               </button>
@@ -340,7 +340,7 @@ export default function Review({ data, activeSpace, initialDate, onSaveReview, o
             <p>
               {weekImports.length
                 ? `最近一次：${weekImports[0].fileName}，${fmtSavedAt(weekImports[0].importedAt)}，${weekImports[0].from} 至 ${weekImports[0].to}。`
-                : `本周没有导入批次，统计里${weekSample.length ? `含有 ${weekSample.length} 条原型示例记录` : "暂无记录"}。`}
+                : `本周没有导入批次，统计里${weekSample.length ? `含有 ${weekSample.length} 条示例记录` : "暂无记录"}。`}
             </p>
           </div>
 

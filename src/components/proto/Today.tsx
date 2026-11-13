@@ -138,6 +138,14 @@ export default function Today({
   const daysToTarget = Math.round(
     (Date.parse(targetDate + "T00:00:00Z") - Date.parse(TODAY + "T00:00:00Z")) / 86400000,
   );
+  const profileBits = [
+    data.profile.goal,
+    data.profile.weak ? `最虚的是${data.profile.weak}` : "",
+    data.profile.busy,
+  ].filter(Boolean);
+  const profileLine = profileBits.length
+    ? `${profileBits.join(" · ")}。只定内容，不规定用多少分钟。`
+    : "还没有填写情况档案；可以到设置里补，或在助手对话里更新。只定内容，不规定用多少分钟。";
 
   const factLine = totalToday
     ? `今天记录 ${fmtMin(totalToday)}：学习 ${fmtMin(byCat.study)}，计划 ${fmtMin(byCat.plan)}，娱乐 ${fmtMin(byCat.leisure)}。${
@@ -265,7 +273,7 @@ export default function Today({
           <h1 className="p-h1">今天</h1>
           <p className="p-sub">
             {activeSpace === "all"
-              ? `${data.profile.goal} · 最虚的是${data.profile.weak} · ${data.profile.busy}。只定内容，不规定用多少分钟。`
+              ? profileLine
               : `${activeSpaceInfo?.name ?? "当前大类"} · ${activeSpaceInfo?.description ?? "按内容推进"}。只定今天要碰的内容。`}
           </p>
         </div>
@@ -441,8 +449,10 @@ export default function Today({
             </div>
             <p className="p-source-line">
               {importedToday
-                ? `${importedToday} 条来自番茄Todo导入${seedToday ? `，${seedToday} 条为原型示例` : ""}。`
-                : "当前显示原型示例记录。导入自己的 .xls 后，复盘只使用实际导入的数据。"}
+                ? `${importedToday} 条来自番茄Todo导入${seedToday ? `，${seedToday} 条为示例记录` : ""}。`
+                : todaySessions.length
+                  ? "当前显示示例记录。导入自己的 .xls 后，复盘只使用实际导入的数据。"
+                  : "今天还没有导入记录。"}
             </p>
           </section>
 

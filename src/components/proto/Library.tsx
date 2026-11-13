@@ -154,7 +154,7 @@ export default function Library({ data, activeSpace, onToast, focusNodeId, onCle
             placeholder="搜标题 / 摘要 / 正文…"
           />
         </div>
-        <button className="p-button primary" type="button" onClick={() => onToast("原型：上传入口，真实后端接入后支持拖拽和分享")}>
+        <button className="p-button primary" type="button" onClick={() => onToast("当前版本的上传入口还未接后端；可以先从地图节点写笔记。")}>
           ＋ 上传
         </button>
       </div>
@@ -233,7 +233,7 @@ export default function Library({ data, activeSpace, onToast, focusNodeId, onCle
           wide
           footer={
             <>
-              <button className="p-button" type="button" onClick={() => onToast("原型：下载会在后端接入后可用")}>
+              <button className="p-button" type="button" onClick={() => onToast("当前版本未接文件存储，下载功能需要后端支持。")}>
                 下载
               </button>
               <button className="p-button primary" type="button" onClick={() => setPreview(null)}>
