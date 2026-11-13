@@ -55,6 +55,9 @@ export default function Settings({
   const [showKey, setShowKey] = useState(false);
   const [testingAi, setTestingAi] = useState(false);
   const [aiTest, setAiTest] = useState<{ ok: boolean; text: string } | null>(null);
+  const [models, setModels] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [modelError, setModelError] = useState("");
 
   const saveAi = () => {
     if (!aiDraft.baseUrl.trim() || !aiDraft.model.trim()) {
@@ -93,6 +96,38 @@ export default function Settings({
       setAiTest({ ok: false, text: error instanceof Error ? error.message : "测试失败" });
     } finally {
       setTestingAi(false);
+    }
+  };
+
+  const loadModels = async () => {
+    if (!aiDraft.baseUrl.trim() || !aiDraft.apiKey.trim()) {
+      setModelError("先填 Base URL 和 API Key，再拉取模型列表。");
+      return;
+    }
+    setLoadingModels(true);
+    setModelError("");
+    try {
+      const response = await fetch("/api/ai/models", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ config: aiDraft }),
+      });
+      const json = (await response.json()) as { models?: string[]; error?: string };
+      if (!response.ok) throw new Error(json.error ?? `HTTP ${response.status}`);
+      const list = (json.models ?? []).filter(Boolean);
+      setModels(list);
+      if (!list.length) {
+        setModelError("接口没有返回模型 id；可以手动填写模型名。");
+      } else if (!list.includes(aiDraft.model)) {
+        setAiDraft((current) => ({ ...current, model: list[0] }));
+        onToast(`已解析 ${list.length} 个模型，当前模型不在列表里，已切到 ${list[0]}。`);
+      } else {
+        onToast(`已解析 ${list.length} 个模型。`);
+      }
+    } catch (error) {
+      setModelError(error instanceof Error ? error.message : "拉取模型失败");
+    } finally {
+      setLoadingModels(false);
     }
   };
 
@@ -243,7 +278,9 @@ export default function Settings({
               <h2>AI 接口</h2>
               <em>{data.ai?.apiKey ? "已配置" : "未配置"}</em>
               <span className={`p-ai-status${data.ai?.apiKey ? " is-on" : ""}`}>
-                {data.ai?.apiKey ? `${data.ai.provider} · ${data.ai.model}` : "助手当前为脚本模式"}
+                {data.ai?.apiKey
+                  ? `${data.ai.provider === "custom" ? "自定义" : data.ai.provider} · ${data.ai.model}`
+                  : "助手当前为脚本模式"}
               </span>
             </div>
             <div className="p-ai-grid">
@@ -272,10 +309,16 @@ export default function Settings({
                 模型
                 <input
                   className="p-input"
+                  list="ai-model-list"
                   value={aiDraft.model}
                   onChange={(event) => setAiDraft({ ...aiDraft, model: event.target.value })}
                   placeholder="deepseek-chat"
                 />
+                <datalist id="ai-model-list">
+                  {models.map((model) => (
+                    <option key={model} value={model} />
+                  ))}
+                </datalist>
               </label>
               <label className="p-field p-ai-wide">
                 Base URL
@@ -319,6 +362,14 @@ export default function Settings({
               <button className="p-button primary sm" type="button" onClick={saveAi}>
                 保存配置
               </button>
+              <button
+                className="p-button sm"
+                type="button"
+                onClick={() => void loadModels()}
+                disabled={loadingModels}
+              >
+                {loadingModels ? "解析中…" : "解析模型"}
+              </button>
               <button className="p-button sm" type="button" onClick={() => void testAi()} disabled={testingAi}>
                 {testingAi ? "测试中…" : "测试连接"}
               </button>
@@ -336,12 +387,18 @@ export default function Settings({
                 清除 Key
               </button>
             </div>
+            {modelError ? <p className="p-ai-test is-error">{modelError}</p> : null}
+            {models.length ? (
+              <p className="p-note">
+                已从接口解析 {models.length} 个模型；模型输入框可以直接选。
+              </p>
+            ) : null}
             {aiTest ? (
               <p className={`p-ai-test${aiTest.ok ? " is-ok" : " is-error"}`}>{aiTest.text}</p>
             ) : null}
             <p className="p-note">
               Key 只保存在当前浏览器的 localStorage；请求经本站的 `/api/ai/chat` 转发，不写入仓库或服务器日志。
-              公共设备上不要保存 Key。
+              不要把包含 Key 的截图发给任何人。
             </p>
           </section>
 

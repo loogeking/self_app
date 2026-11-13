@@ -80,7 +80,8 @@ Docker 启动时同样需要 `-e APP_PASSWORD=...`。
 │  │  └─ api/
 │  │     ├─ login/route.ts       校验密码并写 Cookie
 │  │     ├─ logout/route.ts      清除 Cookie
-│  │     └─ ai/chat/route.ts     AI 请求代理（需登录）
+│  │     ├─ ai/chat/route.ts     AI 请求代理（需登录，支持图片）
+│  │     └─ ai/models/route.ts   模型列表代理（需登录）
 │  ├─ lib/auth.ts                Cookie 哈希与会话校验
 │  ├─ components/
 │  │  ├─ PwaRegister.tsx         注册 service worker
@@ -231,9 +232,15 @@ localStorage 键名是 `footprint-v1`。
 
 - DeepSeek、OpenAI、自定义 OpenAI 兼容接口；
 - Base URL、模型、API Key、温度；
+- “解析模型”请求 `{baseUrl}/models`，解析 `data[].id` 并自动填入模型；
 - 保存到 `localStorage`；
 - 测试连接；
 - 清除 Key。
+
+`/api/ai/models` 只做模型列表代理，同样需要登录。
+
+![模型解析](screenshots/model-parse.jpg)
+![图片对话](screenshots/vision-chat.jpg)
 
 `/api/ai/chat` 只做代理：
 
@@ -247,6 +254,8 @@ localStorage 键名是 `footprint-v1`。
 助手在 `Assistant.tsx` 中：
 
 - 有 API Key 时调用真实接口，带当前页面、节点、计划、最近番茄事实作为系统上下文；
+- 支持最多 4 张图片（选择或粘贴），图片会压缩后以 `image_url` 多模态内容传入；
+- 模型本身必须支持视觉输入，否则由服务商返回错误；没有 Key 时会明确提示无法读图；
 - 没有 Key 时保留脚本回答；
 - 支持中断请求；
 - 仍遵守“不排分钟、部分完成写量、延期写原因、复盘只陈述”的提示词规则。

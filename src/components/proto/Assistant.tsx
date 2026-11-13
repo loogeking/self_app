@@ -15,9 +15,12 @@ type Msg = {
   id: number;
   role: "user" | "ai";
   text: string;
+  images?: string[];
   steps?: string[];
   proposal?: Proposal;
 };
+
+type Attachment = { id: string; name: string; url: string };
 
 type Props = {
   open: boolean;
@@ -40,6 +43,44 @@ const VIEW_LABEL: Record<View, string> = {
   settings: "设置",
 };
 
+function imageToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith("image/")) {
+      reject(new Error(`${file.name} 不是图片`));
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      reject(new Error(`${file.name} 超过 15MB`));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`读不到 ${file.name}`));
+    reader.onload = () => {
+      const source = String(reader.result ?? "");
+      const image = new Image();
+      image.onerror = () => reject(new Error(`${file.name} 无法解码`));
+      image.onload = () => {
+        const max = 1800;
+        const scale = Math.min(1, max / Math.max(image.width, image.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        const context = canvas.getContext("2d");
+        if (!context) {
+          reject(new Error("浏览器无法处理图片"));
+          return;
+        }
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.88));
+      };
+      image.src = source;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function Assistant({
   open,
   onClose,
@@ -61,8 +102,11 @@ export default function Assistant({
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [steps, setSteps] = useState<string[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [imageError, setImageError] = useState("");
   const timers = useRef<number[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const chatRef = useRef<HTMLDivElement | null>(null);
   const idRef = useRef(2);
 
@@ -103,6 +147,8 @@ export default function Assistant({
     timers.current = [];
     setThinking(false);
     setSteps([]);
+    setAttachments([]);
+    setImageError("");
   }, [open]);
 
   const stop = () => {
@@ -175,6 +221,25 @@ export default function Assistant({
     };
   };
 
+  const addImages = async (files: File[]) => {
+    if (!files.length) return;
+    const room = Math.max(0, 4 - attachments.length);
+    const picked = files.slice(0, room);
+    if (files.length > room) setImageError("一次最多带 4 张图片。");
+    else setImageError("");
+    const next: Attachment[] = [];
+    for (const file of picked) {
+      try {
+        const url = await imageToDataUrl(file);
+        next.push({ id: `${Date.now()}-${next.length}`, name: file.name, url });
+      } catch (error) {
+        setImageError(error instanceof Error ? error.message : "图片读取失败");
+      }
+    }
+    if (next.length) setAttachments((old) => [...old, ...next].slice(0, 4));
+    if (imageInputRef.current) imageInputRef.current.value = "";
+  };
+
   const aiSystem = () => {
     const planLines = data.plans
       .slice(0, 8)
@@ -194,7 +259,8 @@ export default function Assistant({
     return [
       "你是个人学习系统「足迹」的规划与复盘助手。",
       "硬规则：只安排内容，不安排分钟；不估计用时；完成标准必须可核对；部分完成必须说明完成了多少；延期必须问原因；复盘只引用事实；信息不足时先问一个最关键的问题；不要使用夸张鼓励和空话。",
-      "回答用简体中文，简洁，直接给建议或问题。",
+      "回答用简体中文，像真人讨论，别套固定标题模板，不要空话和过度排版。",
+      "用户附图时，先说出图片里真正能看清的关键信息，再回答；看不清就说看不清，不要编。",
       `当前页面：${VIEW_LABEL[view]}；当前大类：${space?.name ?? "全部"}；当前节点：${selectedNode?.title ?? "未选择"}。`,
       `情况档案：${JSON.stringify(data.profile)}。`,
       `本周时间事实：学习 ${fmtMin(study)}，计划 ${fmtMin(planMin)}，娱乐 ${fmtMin(leisure)}，数据结构 ${fmtMin(dsMin)}。`,
@@ -205,11 +271,29 @@ export default function Assistant({
 
   const send = async (raw?: string) => {
     const text = (raw ?? input).trim();
-    if (!text || thinking) return;
+    const images = attachments.map((item) => item.url);
+    if ((!text && !images.length) || thinking) return;
     setInput("");
-    setMessages((m) => [...m, { id: idRef.current++, role: "user", text }]);
+    setAttachments([]);
+    setMessages((m) => [
+      ...m,
+      { id: idRef.current++, role: "user", text: text || "请看这几张图片。", images: images.length ? images : undefined },
+    ]);
     setThinking(true);
     setSteps([]);
+
+    if (images.length && !data.ai?.apiKey) {
+      setMessages((m) => [
+        ...m,
+        {
+          id: idRef.current++,
+          role: "ai",
+          text: "要读图片，需要先在设置里配置支持视觉输入的模型接口；现在没有 Key，我看不到图片。",
+        },
+      ]);
+      setThinking(false);
+      return;
+    }
 
     if (data.ai?.apiKey) {
       const controller = new AbortController();
@@ -220,7 +304,21 @@ export default function Assistant({
         const history = messages
           .filter((m) => m.role === "user" || m.role === "ai")
           .slice(-6)
-          .map((m) => ({ role: m.role, content: m.text }));
+          .map((m) => ({
+            role: m.role === "ai" ? "assistant" : "user",
+            content: m.images?.length
+              ? [
+                  { type: "text", text: m.text },
+                  ...m.images.map((url) => ({ type: "image_url", image_url: { url } })),
+                ]
+              : m.text,
+          }));
+        const currentContent = images.length
+          ? [
+              { type: "text", text: text || "请看这几张图片。" },
+              ...images.map((url) => ({ type: "image_url", image_url: { url } })),
+            ]
+          : text;
         const response = await fetch("/api/ai/chat", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -229,7 +327,7 @@ export default function Assistant({
             messages: [
               { role: "system", content: aiSystem() },
               ...history,
-              { role: "user", content: text },
+              { role: "user", content: currentContent },
             ],
           }),
           signal: controller.signal,
@@ -356,7 +454,7 @@ export default function Assistant({
           {data.profile.availableDays}。不知道的会先问。
           <span className={`p-ai-connection${data.ai?.apiKey ? " is-on" : ""}`}>
             {data.ai?.apiKey
-              ? `接口：${data.ai.provider} · ${data.ai.model}`
+              ? `接口：${data.ai.provider === "custom" ? "自定义" : data.ai.provider} · ${data.ai.model}`
               : "未配置 AI 接口，当前使用脚本回答；可在设置里填写 Key。"}
           </span>
         </div>
@@ -367,6 +465,13 @@ export default function Assistant({
               <span className="p-who">{m.role === "user" ? "你" : "助手"}</span>
               <div style={{ minWidth: 0 }}>
                 <div className="p-bubble">{m.text}</div>
+                {m.images?.length ? (
+                  <div className="p-msg-images">
+                    {m.images.map((url, index) => (
+                      <img key={index} src={url} alt={`附图 ${index + 1}`} />
+                    ))}
+                  </div>
+                ) : null}
                 {m.role === "ai" && m.steps ? (
                   <div className="p-steps">
                     {m.steps.map((s, i) => (
@@ -440,6 +545,31 @@ export default function Assistant({
               </button>
             ))}
           </div>
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+            style={{ display: "none" }}
+            onChange={(event) => void addImages(Array.from(event.target.files ?? []))}
+          />
+          {attachments.length ? (
+            <div className="p-attachments">
+              {attachments.map((item) => (
+                <div className="p-attachment" key={item.id}>
+                  <img src={item.url} alt={item.name} />
+                  <button
+                    type="button"
+                    aria-label={`移除 ${item.name}`}
+                    onClick={() => setAttachments((old) => old.filter((entry) => entry.id !== item.id))}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {imageError ? <p className="p-image-error">{imageError}</p> : null}
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -449,16 +579,36 @@ export default function Assistant({
                 send();
               }
             }}
-            placeholder="说人话：排计划、重排、复盘、问某本书…"
+            onPaste={(event) => {
+              const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
+              if (files.length) {
+                event.preventDefault();
+                void addImages(files);
+              }
+            }}
+            placeholder="说人话：排计划、重排、复盘、问某本书；也可以直接贴图…"
           />
           <div className="p-composer-row">
-            <span className="p-tiny p-faint">Enter 发送 · Shift+Enter 换行</span>
+            <button
+              className="p-button sm"
+              type="button"
+              onClick={() => imageInputRef.current?.click()}
+              disabled={thinking || attachments.length >= 4}
+            >
+              ＋ 图片
+            </button>
+            <span className="p-tiny p-faint">可附图 · Enter 发送</span>
             {thinking ? (
               <button className="p-button sm" type="button" onClick={stop}>
                 停止
               </button>
             ) : (
-              <button className="p-button primary sm" type="button" onClick={() => send()} disabled={!input.trim()}>
+              <button
+                className="p-button primary sm"
+                type="button"
+                onClick={() => send()}
+                disabled={!input.trim() && !attachments.length}
+              >
                 发送
               </button>
             )}

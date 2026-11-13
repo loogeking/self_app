@@ -5,25 +5,60 @@ import { isAuthed } from "@/lib/auth";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Message = { role: "system" | "user" | "assistant"; content: string };
+type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
+type Message = { role: "system" | "user" | "assistant"; content: string | ContentPart[] };
 
 type Body = {
   config?: Partial<AiConfig>;
   messages?: Message[];
 };
 
+function cleanParts(parts: unknown[]): ContentPart[] {
+  return parts
+    .map((part): ContentPart | null => {
+      if (!part || typeof part !== "object") return null;
+      const value = part as { type?: unknown; text?: unknown; image_url?: { url?: unknown } };
+      if (value.type === "text" && typeof value.text === "string") {
+        return { type: "text", text: value.text.slice(0, 8000) };
+      }
+      if (
+        value.type === "image_url" &&
+        typeof value.image_url?.url === "string" &&
+        /^data:image\/(png|jpe?g|webp);base64,/i.test(value.image_url.url) &&
+        value.image_url.url.length < 8_000_000
+      ) {
+        return { type: "image_url", image_url: { url: value.image_url.url } };
+      }
+      return null;
+    })
+    .filter((part): part is ContentPart => Boolean(part))
+    .slice(0, 5);
+}
+
 function cleanMessages(input: unknown): Message[] {
   if (!Array.isArray(input)) return [];
   return input
-    .filter(
-      (item): item is Message =>
-        Boolean(item) &&
-        typeof item === "object" &&
-        ["system", "user", "assistant"].includes(String((item as Message).role)) &&
-        typeof (item as Message).content === "string",
-    )
+    .filter((item): item is Message => {
+      if (!item || typeof item !== "object") return false;
+      const role = (item as { role?: unknown }).role;
+      return ["system", "user", "assistant"].includes(String(role));
+    })
     .slice(-20)
-    .map((item) => ({ ...item, content: item.content.slice(0, 12000) }));
+    .map((item) => {
+      if (typeof item.content === "string") {
+        return { ...item, content: item.content.slice(0, 12000) };
+      }
+      if (Array.isArray(item.content)) {
+        return { ...item, content: cleanParts(item.content) };
+      }
+      return { ...item, content: "" };
+    })
+    .filter((item) =>
+      typeof item.content === "string" ? Boolean(item.content.trim()) : item.content.length > 0,
+    );
 }
 
 export async function POST(request: Request) {

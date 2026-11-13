@@ -72,6 +72,8 @@ docker run --rm -p 3000:3000 -e APP_PASSWORD=你的密码 footprint
 - 知识库支持导入 PDF、图片、Markdown；原始文件保存在浏览器 IndexedDB，不进入 localStorage。
 - 学习数据只存在当前浏览器的 `localStorage`，键名 `footprint-v1`。
 - 助手在未配置 API 时使用脚本回答；配置 Key 后通过需要登录的 `/api/ai/chat` 请求 OpenAI 兼容接口。
+- AI 设置里的“解析模型”会从 `{baseUrl}/models` 读取模型列表；助手最多可带 4 张图片，需模型支持视觉输入。
+- 不要把包含 API Key 的界面截图发给别人；如果已经发出，立刻去服务商后台吊销。
 
 ## 结构
 
