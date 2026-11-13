@@ -71,7 +71,7 @@ docker run --rm -p 3000:3000 -e APP_PASSWORD=你的密码 footprint
 - 番茄Todo 导出的 `.xls` 实际是 SpreadsheetML XML，由 `src/components/proto/pomodoro.ts` 在浏览器中解析；复盘页和今日页共用。
 - 导入按「日期 + 开始时间 + 待办名称」去重；0 分钟记录保留但不计入统计。复盘导入会先核对文件声明的条数和时长。
 - 知识库支持导入 PDF、图片、Markdown；原始文件保存在浏览器 IndexedDB，不进入 localStorage。
-- 学习数据只存在当前浏览器的 `localStorage`，键名 `footprint-v1`。
+- 学习数据只存在当前浏览器的 `localStorage`，键名 `footprint-v2`。从旧版升级时会一次性清掉 `footprint-v1` 的演示数据。
 - 助手在未配置 API 时使用脚本回答；配置 Key 后通过需要登录的 `/api/ai/chat` 请求 OpenAI 兼容接口。
 - AI 设置里的“解析模型”会从 `{baseUrl}/models` 读取模型列表；助手最多可带 4 张图片，需模型支持视觉输入。
 - 不要把包含 API Key 的界面截图发给别人；如果已经发出，立刻去服务商后台吊销。

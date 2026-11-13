@@ -24,7 +24,8 @@ import Settings from "./Settings";
 import Assistant from "./Assistant";
 import { Modal, weekdayCN } from "./ui";
 
-const KEY = "footprint-v1";
+const KEY = "footprint-v2";
+const V2_RESET_KEY = "footprint-v2-reset";
 const AI_CLEAR_KEY = "footprint-ai-key-cleared-v2";
 
 const NAV: { key: View; label: string }[] = [
@@ -67,6 +68,12 @@ export default function Prototype() {
 
   useEffect(() => {
     try {
+      // v2 起改为全空工作区：一次性清除旧版演示数据与旧 Key。
+      if (!localStorage.getItem(V2_RESET_KEY)) {
+        localStorage.removeItem("footprint-v1");
+        localStorage.removeItem("proto-v4");
+        localStorage.setItem(V2_RESET_KEY, "1");
+      }
       // 清理旧版本可能存下的 API Key；只清一次，之后在设置里重新填写的 Key 会正常保留。
       if (!localStorage.getItem(AI_CLEAR_KEY)) {
         const raw = localStorage.getItem(KEY);

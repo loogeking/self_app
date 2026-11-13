@@ -154,7 +154,7 @@ Docker 启动时同样需要 `-e APP_PASSWORD=...`。
 
 ![新建目标后的情况问询](screenshots/situation-onboarding.jpg)
 
-localStorage 键名是 `footprint-v1`。
+localStorage 键名是 `footprint-v2`。首次加载 v2 时会删除旧的 `footprint-v1` / `proto-v4`，确保旧演示数据不再出现。
 
 ## 6. 今日与番茄导入
 
