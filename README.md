@@ -81,7 +81,9 @@ docker run --rm -p 3000:3000 -e APP_PASSWORD=你的密码 footprint
 
 ## 结构
 
-完整的模块职责、数据流、3D 地图与 AI 配置说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+完整项目手册（系统、数据边界、AI 权限、仓库、Vercel/域名部署和运维）见 [PROJECT_HANDBOOK.md](PROJECT_HANDBOOK.md)。
+
+更细的模块职责、数据流和设计说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ```text
 src/app/
