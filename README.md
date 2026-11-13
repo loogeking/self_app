@@ -84,5 +84,3 @@ src/components/proto/
   pomodoro.ts         SpreadsheetML 导入解析
   types.ts / ui.tsx   类型与通用组件
 ```
-
-旧数据库实现和原始 PDF 素材已移出项目，仓库只保留部署所需内容。
